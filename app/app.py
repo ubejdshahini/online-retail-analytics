@@ -144,3 +144,89 @@ with st.sidebar:
     st.markdown("---")
     st.caption("Online Retail Analytics Platform")
     
+
+# ══════════════════════════════════════════════════════════════════════
+# SESSION STATE — shared cleaned df across pages
+# ══════════════════════════════════════════════════════════════════════
+
+if 'df_clean' not in st.session_state:
+    st.session_state['df_clean'] = None
+if 'filename' not in st.session_state:
+    st.session_state['filename'] = None
+
+
+# ══════════════════════════════════════════════════════════════════════
+# HELPER FUNCTIONS
+# ══════════════════════════════════════════════════════════════════════
+
+def validate_columns(df: pd.DataFrame) -> tuple[bool, list[str]]:
+    """Check if uploaded file has the required columns.
+
+    Accepts both raw format (Price, Customer ID) and pre-cleaned format
+    (UnitPrice, CustomerID) so users can upload either version.
+    """
+    cols = set(df.columns)
+    missing = []
+    for req in REQUIRED_COLUMNS:
+        alias = COLUMN_ALIASES.get(req)          # e.g. 'Price' → 'UnitPrice'
+        rev_alias = {v: k for k, v in COLUMN_ALIASES.items()}.get(req)  # reverse
+        if req not in cols and (alias not in cols) and (rev_alias not in cols):
+            missing.append(req)
+    # Check price column (Price OR UnitPrice)
+    if 'Price' not in cols and 'UnitPrice' not in cols:
+        missing.append('Price / UnitPrice')
+    # Check customer column (Customer ID OR CustomerID)
+    if 'Customer ID' not in cols and 'CustomerID' not in cols:
+        missing.append('Customer ID / CustomerID')
+    return len(missing) == 0, missing
+
+
+def is_already_cleaned(df: pd.DataFrame) -> bool:
+    """Return True if the CSV is already in the cleaned format (has Revenue & CustomerID)."""
+    return 'Revenue' in df.columns and 'CustomerID' in df.columns and 'IsReturn' in df.columns
+
+
+def load_and_clean(uploaded_file) -> pd.DataFrame | None:
+    """Read CSV, rename columns if needed, then run clean_data() — or skip
+    cleaning if the file is already in the cleaned format.
+    """
+    try:
+        df_raw = pd.read_csv(uploaded_file, parse_dates=['InvoiceDate'])
+    except Exception as e:
+        st.error(f":material/cancel: Could not read file: {e}")
+        return None
+
+    ok, missing = validate_columns(df_raw)
+    if not ok:
+        st.error(
+            f":material/cancel: **Invalid file format.** Missing required columns: `{', '.join(missing)}`\n\n"
+            "Expected columns: `Invoice, StockCode, Description, Quantity, "
+            "InvoiceDate, Price (or UnitPrice), Customer ID (or CustomerID), Country`"
+        )
+        return None
+
+    # If the file is already cleaned (e.g. cleaned_retail_data.csv), skip re-cleaning
+    if is_already_cleaned(df_raw):
+        return df_raw
+
+    # Raw file — rename Price → UnitPrice then run cleaner
+    if 'Price' in df_raw.columns and 'UnitPrice' not in df_raw.columns:
+        df_raw = df_raw.rename(columns={'Price': 'UnitPrice'})
+
+    with st.spinner(":material/mop: Cleaning data..."):
+        df_clean = clean_data(df_raw)
+
+    return df_clean
+
+
+def require_data() -> bool:
+    """Show a prompt if no data is loaded yet. Returns True if data is ready."""
+    if st.session_state['df_clean'] is None:
+        st.info(":material/folder_open: Please upload a CSV file on the **:material/home: Data & Upload** page first.")
+        return False
+    return True
+
+
+# ══════════════════════════════════════════════════════════════════════
+# PAGE: DATA & UPLOAD
+# ══════════════════════════════════════════════════════════════════════
