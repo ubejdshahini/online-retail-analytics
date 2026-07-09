@@ -6,7 +6,7 @@ An end-to-end business intelligence platform for retail sales data — powered b
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.34+-red?logo=streamlit)](https://streamlit.io)
 [![Plotly](https://img.shields.io/badge/Plotly-5.18+-purple?logo=plotly)](https://plotly.com)
 [![Tests](https://img.shields.io/badge/Tests-29%20passed-brightgreen?logo=pytest)](tests/)
-[![License](https://img.shields.io/badge/License-MIT-lightgrey)](LICENSE)
+
 
 ---
 
@@ -130,6 +130,4 @@ A pre-cleaned demo file is included at `data/cleaned_retail_data.csv`. Raw files
 
 ---
 
-## License
 
-MIT License
