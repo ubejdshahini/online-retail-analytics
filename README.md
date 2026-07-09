@@ -1,38 +1,36 @@
 # Online Retail Analytics Platform
 
-An end-to-end analytics platform for retail sales data, built on the [Online Retail II (UCI)](https://archive.ics.uci.edu/dataset/502/online+retail+ii) dataset.
+An end-to-end business intelligence platform for retail sales data — powered by Python, Plotly, and Streamlit.
+
+[![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python)](https://python.org)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.34+-red?logo=streamlit)](https://streamlit.io)
+[![Plotly](https://img.shields.io/badge/Plotly-5.18+-purple?logo=plotly)](https://plotly.com)
+[![Tests](https://img.shields.io/badge/Tests-29%20passed-brightgreen?logo=pytest)](tests/)
+[![License](https://img.shields.io/badge/License-MIT-lightgrey)](LICENSE)
 
 ---
 
-## Project Structure
+## Overview
 
-```text
-online-retail-analytics/
-├── data/
-│   ├── raw/                          # Original CSV/Excel files (gitignored)
-│   ├── processed/                    # Intermediate cleaned datasets
-│   └── cleaned_retail_data.csv       # Demo dataset for Streamlit
-├── notebooks/
-│   ├── 01_data_exploration.ipynb     # Initial dataset exploration
-│   ├── 02_eda_analysis.ipynb         # EDA & KPI insights
-│   ├── 03_rfm_recommendations.ipynb  # RFM segmentation & recommendation rules
-│   └── 04_visualisations.ipynb       # Plotly charting examples
-├── src/
-│   ├── data_cleaning.py              # clean_data() — reusable data cleaning pipeline
-│   ├── analysis.py                   # EDA functions & KPI generation
-│   ├── recommendation_engine.py      # RFM segmentation & rule-based recommendations
-│   ├── visualisations.py             # Plotly chart generation functions
-│   └── export_utils.py               # Multi-sheet Excel report generator
-├── app/
-│   └── app.py                        # Streamlit dashboard application
-├── tests/
-│   └── test_analytics.py             # Unit tests (pytest)
-├── docs/
-│   ├── Plani_Projektit_Online_Retail_Analytics.md   # Project plan
-│   └── Plani_Hapave_Ndarja_Punes_4_Zhvillues.md     # Developer work distribution
-├── requirements.txt
-└── README.md
-```
+Upload any retail CSV and the platform automatically cleans the data, computes KPIs, segments customers via RFM, and renders interactive charts — all in real time, with no database required.
+
+Built on the [Online Retail II dataset (UCI)](https://archive.ics.uci.edu/dataset/502/online+retail+ii), compatible with any similarly structured retail file.
+
+---
+
+## Features
+
+| Feature | Description |
+|---------|-------------|
+| Smart CSV Upload | Accepts raw and pre-cleaned formats; auto-validates columns |
+| Automatic Data Cleaning | Normalises columns, flags returns, derives Revenue |
+| Sales Dashboard | Monthly trends, peak hours, best/worst weekday |
+| Product Analysis | Top products, low-revenue candidates, return rate heatmap |
+| Customer Intelligence | RFM segments, CLV distribution, new vs returning, churn risk |
+| Geographic Heatmap | Choropleth world map by revenue |
+| Business Recommendations | 7 rule-based insights ranked by estimated profit impact |
+| What-If Simulator | Adjustable sliders; projections update in real time |
+| Excel Report Export | Executive Summary, Customer Segments, Recommendations sheets |
 
 ---
 
@@ -40,107 +38,98 @@ online-retail-analytics/
 
 | Layer | Technology |
 |-------|-----------|
-| Data processing | Python 3.11+, pandas, numpy |
+| Language | Python 3.11+ |
+| Data Processing | pandas, numpy |
 | Visualisations | Plotly |
-| Web application | Streamlit |
-| Reporting | openpyxl (Excel export) |
-| Notebooks | Jupyter |
+| Web Application | Streamlit |
+| Excel Reporting | openpyxl |
 | Testing | pytest |
 
 ---
 
-## Setup
+## Project Structure
 
-```bash
-# 1. Clone the repository
-git clone https://github.com/blinasopjani/online-retail-analytics.git
-cd online-retail-analytics
-
-# 2. Create and activate a virtual environment
-python -m venv venv
-
-# On Windows:
-venv\Scripts\activate
-
-# On macOS/Linux:
-source venv/bin/activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
+```text
+online-retail-analytics/
+├── app/
+│   └── app.py                        # Streamlit dashboard (3 pages)
+├── src/
+│   ├── data_cleaning.py              # clean_data() — normalisation pipeline
+│   ├── analysis.py                   # KPI & EDA functions
+│   ├── recommendation_engine.py      # RFM segmentation & recommendations
+│   ├── visualisations.py             # Plotly chart generators
+│   └── export_utils.py               # Excel report generator
+├── tests/
+│   └── test_analysis.py              # 29 unit tests
+├── notebooks/                        # Jupyter EDA notebooks
+├── data/
+│   └── cleaned_retail_data.csv       # Pre-cleaned demo dataset
+├── docs/
+│   └── architecture_and_workflow.md  # Module dependency & data flow
+└── requirements.txt
 ```
 
 ---
 
-## Usage
-
-### Running the Streamlit App
+## Getting Started
 
 ```bash
-streamlit run app/app.py
-```
+# Clone and install
+git clone https://github.com/ubejdshahini/online-retail-analytics.git
+cd online-retail-analytics
+python -m venv venv && venv\Scripts\activate   # Windows
+pip install -r requirements.txt
 
-The app will open in your browser at `http://localhost:8501`.
+# Run the app
+python -m streamlit run app/app.py
 
-### Running Notebooks
-
-```bash
-jupyter notebook notebooks/
-```
-
-### Running Tests
-
-```bash
+# Run tests
 pytest tests/
 ```
+
+Open **http://localhost:8501** in your browser.
+
+---
+
+## How It Works
+
+```
+Upload CSV
+    → data_cleaning.py      Normalise columns, compute Revenue & IsReturn
+    → analysis.py           KPIs, trends, product & customer statistics
+    → recommendation_engine.py   RFM scoring, segments, recommendations
+    → visualisations.py     Interactive Plotly charts
+    → Dashboard             Rendered in real time, fully in-memory
+```
+
+See [docs/architecture_and_workflow.md](docs/architecture_and_workflow.md) for the full module dependency map.
 
 ---
 
 ## Dataset
 
 **Online Retail II** — UCI Machine Learning Repository  
-Source: https://archive.ics.uci.edu/dataset/502/online+retail+ii
+https://archive.ics.uci.edu/dataset/502/online+retail+ii
 
-A cleaned demo version is included at `data/cleaned_retail_data.csv` for immediate use with the Streamlit app. Raw data files are gitignored and must be downloaded separately.
-
----
-
-## Application Features
-
-| Section | Description |
-|---------|-------------|
-| **Home & Upload** | Upload a monthly CSV file; automatic format validation |
-| **Sales Dashboard** | KPIs, revenue trends, top products |
-| **Customer Analysis** | RFM segments, CLV, churn risk |
-| **Geographic Performance** | Country-based revenue mapping |
-| **Recommendations** | Rule-based insights with estimated profit impact |
-| **What-If Simulator** | Revenue projections based on RFM segment data |
-| **Export** | Download a multi-sheet Excel report |
+A pre-cleaned demo file is included at `data/cleaned_retail_data.csv`. Raw files must be downloaded separately (gitignored).
 
 ---
 
-## Branch Strategy
+## Customer Segments (RFM)
 
-```
-main
- └── develop
-      ├── feature/data-pipeline       # Data cleaning & pipeline (Dev A)
-      ├── feature/analytics-engine    # EDA, RFM, recommendations (Dev B)
-      ├── feature/streamlit-app       # Streamlit dashboard & export (Dev C)
-      └── feature/testing-and-docs    # Tests, docs, deployment (Dev D)
-```
-
-See [`docs/Plani_Hapave_Ndarja_Punes_4_Zhvillues.md`](docs/Plani_Hapave_Ndarja_Punes_4_Zhvillues.md) for the full developer work distribution.
+| Segment | Description | Action |
+|---------|-------------|--------|
+| Champions | Recent, frequent, high spend | Reward & retain |
+| Loyal Customers | Frequent and recent | Upsell & cross-sell |
+| High Spenders | High spend, moderate frequency | Frequency campaigns |
+| Recent Customers | New buyers, not yet habitual | Onboarding sequences |
+| Potential Loyalists | Promising, need nurturing | Second-purchase incentive |
+| At Risk | Were valuable, now inactive | Win-back campaign |
+| Needs Attention | Drifting frequent buyers | Re-engagement offer |
+| Lost | Long inactive, low value | Deep discount or sunset |
 
 ---
 
-## Project Status
+## License
 
-- [x] Repository structure & dependency management
-- [x] **Phase 1 — Data Processing:** Dataset exploration & `clean_data()` pipeline
-- [x] **Phase 2 — Analytics & Insights:** EDA functions, RFM segmentation, recommendation engine
-- [x] **Phase 3 — Visualisations:** Interactive Plotly charts
-- [x] **Phase 4 — Strategic Plan:** Rule-based recommendations with profit impact estimates
-- [x] **Phase 5 — Streamlit Application:** Full dashboard with 6 views
-- [x] **Phase 6 — What-If Simulator & Excel Export**
-- [x] **Phase 7 — Automated Testing:** Unit tests covering cleaning, KPIs, RFM, recommendations
-- [x] Ready for deployment on Streamlit Cloud
+MIT License

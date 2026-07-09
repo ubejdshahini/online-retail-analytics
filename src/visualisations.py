@@ -1,11 +1,5 @@
 """
-Step 2.3 — Visualisations (Dev B).
-
-All charts are built with Plotly so they can be rendered directly in
-Streamlit (Dev C) without any conversion.
-
-Every function accepts a DataFrame and returns a plotly.graph_objects.Figure.
-Dev C calls these functions and passes the result to st.plotly_chart().
+Functions for generating Plotly visualizations.
 """
 
 import pandas as pd
@@ -49,9 +43,7 @@ def _apply_base(fig: go.Figure, title: str) -> go.Figure:
     return fig
 
 
-# ─────────────────────────────────────────────
-# 1. REVENUE CHARTS
-# ─────────────────────────────────────────────
+# REVENUE CHARTS
 
 def plot_monthly_revenue(monthly_df: pd.DataFrame) -> go.Figure:
     """
@@ -132,9 +124,7 @@ def plot_revenue_by_hour(hourly_df: pd.DataFrame) -> go.Figure:
     return _apply_base(fig, 'Sales Activity by Hour of Day')
 
 
-# ─────────────────────────────────────────────
-# 2. PRODUCT CHARTS
-# ─────────────────────────────────────────────
+# PRODUCT CHARTS
 
 def plot_top_products(top_df: pd.DataFrame, n: int = 10) -> go.Figure:
     """Horizontal bar chart: top N products by revenue."""
@@ -176,9 +166,7 @@ def plot_product_return_rates(return_df: pd.DataFrame, n: int = 15) -> go.Figure
     return _apply_base(fig, 'Product Return Rates (top offenders)')
 
 
-# ─────────────────────────────────────────────
-# 3. CUSTOMER CHARTS
-# ─────────────────────────────────────────────
+# CUSTOMER CHARTS
 
 def plot_rfm_segments(seg_summary: pd.DataFrame) -> go.Figure:
     """
@@ -270,9 +258,7 @@ def plot_new_vs_returning(new_ret_df: pd.DataFrame) -> go.Figure:
     return _apply_base(fig, 'New vs Returning Customers per Month')
 
 
-# ─────────────────────────────────────────────
-# 4. GEOGRAPHIC CHART
-# ─────────────────────────────────────────────
+# GEOGRAPHIC CHART
 
 def plot_country_revenue(geo_df: pd.DataFrame, exclude_uk: bool = True) -> go.Figure:
     """
@@ -340,9 +326,7 @@ def plot_top_countries_bar(geo_df: pd.DataFrame, n: int = 10,
     return _apply_base(fig, title)
 
 
-# ─────────────────────────────────────────────
-# 5. KPI SUMMARY CARD (returns a dict for Streamlit st.metric)
-# ─────────────────────────────────────────────
+# KPI SUMMARY CARD
 
 def format_kpi_cards(kpi_dict: dict) -> list[dict]:
     """

@@ -1,13 +1,7 @@
 """
-Step 1.2 — Data Cleaning and Standardization (Dev A).
-
-This function will be used twice:
-1. By Dev B for EDA (notebook 02).
-2. By Dev C within Streamlit, for every new CSV uploaded by the client.
-
-Therefore, it must remain a pure function without side-effects (no printing,
-no reading files on its own — it takes a DataFrame, returns a DataFrame).
+Functions for cleaning and standardizing the retail dataset.
 """
+
 
 import pandas as pd
 

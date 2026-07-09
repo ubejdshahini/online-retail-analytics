@@ -1,10 +1,5 @@
 """
-Phase 6 — Automated Tests for core analytics pipeline.
-
-Tests cover:
-  - data_cleaning.clean_data()
-  - analysis.get_kpi_summary()
-  - recommendation_engine.compute_rfm() and generate_recommendations()
+Automated unit tests for the core retail analytics pipeline.
 """
 
 import sys
@@ -55,9 +50,7 @@ def cleaned_df(raw_df):
     return clean_data(raw_df)
 
 
-# ══════════════════════════════════════════════════════════════════════
 # TESTS: data_cleaning.clean_data()
-# ══════════════════════════════════════════════════════════════════════
 
 class TestCleanData:
     def test_customer_id_renamed(self, cleaned_df):
@@ -103,9 +96,7 @@ class TestCleanData:
         assert len(cleaned) == len(clean_data(raw_df))
 
 
-# ══════════════════════════════════════════════════════════════════════
 # TESTS: analysis.get_kpi_summary()
-# ══════════════════════════════════════════════════════════════════════
 
 class TestKPISummary:
     def test_returns_dict(self, cleaned_df):
@@ -146,9 +137,7 @@ class TestKPISummary:
         assert 0 <= kpis['return_rate_%'] <= 100
 
 
-# ══════════════════════════════════════════════════════════════════════
 # TESTS: analysis.get_return_summary()
-# ══════════════════════════════════════════════════════════════════════
 
 class TestReturnSummary:
     def test_returns_dict(self, cleaned_df):
@@ -167,9 +156,7 @@ class TestReturnSummary:
         assert result['revenue_lost_from_returns'] >= 0
 
 
-# ══════════════════════════════════════════════════════════════════════
 # TESTS: recommendation_engine.compute_rfm()
-# ══════════════════════════════════════════════════════════════════════
 
 class TestRFM:
     def test_rfm_returns_dataframe(self, cleaned_df):
@@ -197,9 +184,7 @@ class TestRFM:
             assert 'Customers' in summary.columns
 
 
-# ══════════════════════════════════════════════════════════════════════
 # TESTS: recommendation_engine.generate_recommendations()
-# ══════════════════════════════════════════════════════════════════════
 
 class TestRecommendations:
     def test_returns_list(self, cleaned_df):
@@ -233,9 +218,7 @@ class TestRecommendations:
             assert impacts == sorted(impacts, reverse=True)
 
 
-# ══════════════════════════════════════════════════════════════════════
 # TESTS: analysis.get_monthly_revenue()
-# ══════════════════════════════════════════════════════════════════════
 
 class TestMonthlyRevenue:
     def test_returns_dataframe(self, cleaned_df):

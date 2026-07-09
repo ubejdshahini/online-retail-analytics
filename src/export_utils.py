@@ -35,7 +35,7 @@ def generate_excel_report(df: pd.DataFrame, kpis: dict, recs: list[dict], projec
         bottom=Side(style='thin', color='D3D3D3')
     )
     
-    # ── SHEET 1: Executive Summary ──────────────────────────────────────────
+    # SHEET 1: Executive Summary
     ws1 = wb.active
     ws1.title = "Executive Summary"
     ws1.views.sheetView[0].showGridLines = True
@@ -111,7 +111,7 @@ def generate_excel_report(df: pd.DataFrame, kpis: dict, recs: list[dict], projec
                 cell.font = Font(name="Segoe UI", size=10, bold=True, color="6C63FF")
             curr_row += 1
 
-    # ── SHEET 2: Customer Segments ──────────────────────────────────────────
+    # SHEET 2: Customer Segments
     from src.recommendation_engine import compute_rfm, get_segment_summary
     rfm = compute_rfm(df)
     seg_summary = get_segment_summary(rfm)
@@ -163,7 +163,7 @@ def generate_excel_report(df: pd.DataFrame, kpis: dict, recs: list[dict], projec
             else:
                 ws2.cell(row=r_idx, column=c).font = bold_font
 
-    # ── SHEET 3: Recommendations ────────────────────────────────────────────
+    # SHEET 3: Recommendations
     ws3 = wb.create_sheet(title="Actionable Recommendations")
     ws3.views.sheetView[0].showGridLines = True
     

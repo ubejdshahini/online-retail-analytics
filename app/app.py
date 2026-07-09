@@ -4,7 +4,7 @@ import io
 import pandas as pd
 import streamlit as st
 
-# ── Path setup ─────────────────────────────────────────────────────────
+# Path setup
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.data_cleaning import clean_data
@@ -25,7 +25,7 @@ from src.visualisations import (
     format_kpi_cards,
 )
 
-# ── Required columns for validation ───────────────────────────────────
+# Required columns for validation
 # Raw format uses 'Price' and 'Customer ID'; cleaned export uses 'UnitPrice' and 'CustomerID'
 REQUIRED_COLUMNS = {'Invoice', 'StockCode', 'Description',
                     'Quantity', 'InvoiceDate', 'Country'}
@@ -35,7 +35,7 @@ COLUMN_ALIASES = {
     'Customer ID': 'CustomerID',
 }
 
-# ── Page config ────────────────────────────────────────────────────────
+# Page config
 st.set_page_config(
     page_title='Retail Analytics Platform',
     page_icon='💼',
@@ -43,7 +43,7 @@ st.set_page_config(
     initial_sidebar_state='expanded',
 )
 
-# ── Inject custom CSS ──────────────────────────────────────────────────
+# Inject custom CSS
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
@@ -127,9 +127,7 @@ h3 { color: #EAEAEA; word-wrap: break-word; }
 """, unsafe_allow_html=True)
 
 
-# ══════════════════════════════════════════════════════════════════════
 # SIDEBAR
-# ══════════════════════════════════════════════════════════════════════
 
 with st.sidebar:
     st.markdown("## :material/analytics: Retail Analytics")
@@ -145,9 +143,7 @@ with st.sidebar:
     st.caption("Online Retail Analytics Platform")
     
 
-# ══════════════════════════════════════════════════════════════════════
-# SESSION STATE — shared cleaned df across pages
-# ══════════════════════════════════════════════════════════════════════
+# SESSION STATE
 
 if 'df_clean' not in st.session_state:
     st.session_state['df_clean'] = None
@@ -155,9 +151,7 @@ if 'filename' not in st.session_state:
     st.session_state['filename'] = None
 
 
-# ══════════════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
-# ══════════════════════════════════════════════════════════════════════
 
 def validate_columns(df: pd.DataFrame) -> tuple[bool, list[str]]:
     """Check if uploaded file has the required columns.
@@ -227,9 +221,7 @@ def require_data() -> bool:
     return True
 
 
-# ══════════════════════════════════════════════════════════════════════
 # PAGE: DATA & UPLOAD
-# ══════════════════════════════════════════════════════════════════════
 
 if page == ":material/home: Data & Upload":
     st.title(":material/analytics: Online Retail Analytics Platform")
@@ -305,9 +297,7 @@ if page == ":material/home: Data & Upload":
             st.dataframe(df.head(50), use_container_width=True)
 
 
-# ══════════════════════════════════════════════════════════════════════
 # PAGE: ANALYTICS DASHBOARD
-# ══════════════════════════════════════════════════════════════════════
 
 elif page == ":material/analytics: Analytics Dashboard":
     st.title(":material/analytics: Analytics Dashboard")
@@ -437,9 +427,7 @@ elif page == ":material/analytics: Analytics Dashboard":
             )
 
 
-# ══════════════════════════════════════════════════════════════════════
 # PAGE: INSIGHTS & ACTIONS
-# ══════════════════════════════════════════════════════════════════════
 
 elif page == ":material/insights: Insights & Actions":
     st.title(":material/insights: Insights & Actions")

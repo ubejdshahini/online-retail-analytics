@@ -1,21 +1,18 @@
 """
-Step 2.2 — RFM Segmentation and Recommendation Engine (Dev B).
-
-compute_rfm()             → RFM scores + customer segment labels
-generate_recommendations() → rule-based business recommendations with
-                             an estimated profit impact score
-
-Output of generate_recommendations() is called directly by Dev C (Streamlit).
+Functions for RFM customer segmentation and rule-based business recommendations.
 """
 
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from src.analysis import (
+    get_product_return_rate,
+    get_worst_products,
+    get_revenue_by_hour,
+    get_revenue_by_day_of_week
+)
 
-
-# ─────────────────────────────────────────────────────────────────
-# PART 1 — RFM COMPUTATION
-# ─────────────────────────────────────────────────────────────────
+# RFM COMPUTATION
 
 def compute_rfm(df: pd.DataFrame, reference_date: datetime = None) -> pd.DataFrame:
     """
@@ -126,9 +123,7 @@ def get_segment_summary(rfm: pd.DataFrame) -> pd.DataFrame:
     return summary
 
 
-# ─────────────────────────────────────────────────────────────────
-# PART 2 — RECOMMENDATION ENGINE
-# ─────────────────────────────────────────────────────────────────
+# RECOMMENDATION ENGINE
 
 def generate_recommendations(df: pd.DataFrame) -> list[dict]:
     """
@@ -210,12 +205,8 @@ def generate_recommendations(df: pd.DataFrame) -> list[dict]:
             'priority': 'Medium'
         })
 
-    # ── Rule 4: High return rate products ───────────────────────
+    # Rule 4: High return rate products
     if 'IsReturn' in df.columns and 'Description' in df.columns:
-        try:
-            from src.analysis import get_product_return_rate
-        except ImportError:
-            from analysis import get_product_return_rate
         return_rate = get_product_return_rate(df)
         high_return = return_rate[return_rate['ReturnRate_%'] > 20]
         if len(high_return) > 0:
@@ -234,12 +225,8 @@ def generate_recommendations(df: pd.DataFrame) -> list[dict]:
                 'priority': 'Medium'
             })
 
-    # ── Rule 5: Low revenue products — consider discontinuing ────
+    # Rule 5: Low revenue products
     if 'Description' in df.columns and 'Revenue' in df.columns:
-        try:
-            from src.analysis import get_worst_products
-        except ImportError:
-            from analysis import get_worst_products
         worst = get_worst_products(df, n=20)
         if len(worst) > 0:
             recommendations.append({
@@ -255,12 +242,8 @@ def generate_recommendations(df: pd.DataFrame) -> list[dict]:
                 'priority': 'Low'
             })
 
-    # ── Rule 6: Peak hour / day opportunity ─────────────────────
+    # Rule 6: Peak hour / day opportunity
     if 'InvoiceDate' in df.columns and 'Revenue' in df.columns:
-        try:
-            from src.analysis import get_revenue_by_hour, get_revenue_by_day_of_week
-        except ImportError:
-            from analysis import get_revenue_by_hour, get_revenue_by_day_of_week
         hourly = get_revenue_by_hour(df)
         if not hourly.empty:
             peak_hour = hourly.loc[hourly['Revenue'].idxmax(), 'Hour']
@@ -279,7 +262,7 @@ def generate_recommendations(df: pd.DataFrame) -> list[dict]:
                 'priority': 'Medium'
             })
 
-    # ── Rule 7: Single-purchase customers — cross-sell ──────────
+    # Rule 7: Single-purchase customers
     if 'Frequency' in rfm.columns:
         one_timers = rfm[rfm['Frequency'] == 1]
         if len(one_timers) > 0:

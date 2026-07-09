@@ -1,17 +1,12 @@
 """
-Step 2.1 — Deep EDA Analysis Functions (Dev B).
-
-Each function returns a DataFrame/dict so they can be called
-directly from Streamlit (Dev C).
+Functions for deep EDA and retail data analysis.
 """
 
 import pandas as pd
 import numpy as np
 
 
-# ─────────────────────────────────────────────
-# 1. REVENUE ANALYSIS
-# ─────────────────────────────────────────────
+# REVENUE ANALYSIS
 
 def get_monthly_revenue(df: pd.DataFrame) -> pd.DataFrame:
     """Returns aggregated revenue per month with month-over-month growth %."""
@@ -82,9 +77,7 @@ def get_revenue_by_day_of_week(df: pd.DataFrame) -> pd.DataFrame:
     return dow
 
 
-# ─────────────────────────────────────────────
-# 2. PRODUCT ANALYSIS
-# ─────────────────────────────────────────────
+# PRODUCT ANALYSIS
 
 def get_top_products(df: pd.DataFrame, n: int = 10) -> pd.DataFrame:
     """Returns top N products by revenue and quantity sold."""
@@ -126,9 +119,7 @@ def get_product_return_rate(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-# ─────────────────────────────────────────────
-# 3. CUSTOMER ANALYSIS
-# ─────────────────────────────────────────────
+# CUSTOMER ANALYSIS
 
 def get_country_performance(df: pd.DataFrame) -> pd.DataFrame:
     """Returns revenue, orders, and unique customers per country."""
@@ -217,9 +208,7 @@ def get_new_vs_returning_customers(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-# ─────────────────────────────────────────────
-# 4. RETURNS / REFUND ANALYSIS
-# ─────────────────────────────────────────────
+# RETURNS / REFUND ANALYSIS
 
 def get_return_summary(df: pd.DataFrame) -> dict:
     """
@@ -245,9 +234,7 @@ def get_return_summary(df: pd.DataFrame) -> dict:
     }
 
 
-# ─────────────────────────────────────────────
-# 5. OVERALL KPI SUMMARY
-# ─────────────────────────────────────────────
+# OVERALL KPI SUMMARY
 
 def get_kpi_summary(df: pd.DataFrame) -> dict:
     """
