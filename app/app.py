@@ -144,3 +144,474 @@ with st.sidebar:
     st.markdown("---")
     st.caption("Online Retail Analytics Platform")
     
+
+# ══════════════════════════════════════════════════════════════════════
+# SESSION STATE — shared cleaned df across pages
+# ══════════════════════════════════════════════════════════════════════
+
+if 'df_clean' not in st.session_state:
+    st.session_state['df_clean'] = None
+if 'filename' not in st.session_state:
+    st.session_state['filename'] = None
+
+
+# ══════════════════════════════════════════════════════════════════════
+# HELPER FUNCTIONS
+# ══════════════════════════════════════════════════════════════════════
+
+def validate_columns(df: pd.DataFrame) -> tuple[bool, list[str]]:
+    """Check if uploaded file has the required columns.
+
+    Accepts both raw format (Price, Customer ID) and pre-cleaned format
+    (UnitPrice, CustomerID) so users can upload either version.
+    """
+    cols = set(df.columns)
+    missing = []
+    for req in REQUIRED_COLUMNS:
+        alias = COLUMN_ALIASES.get(req)          # e.g. 'Price' → 'UnitPrice'
+        rev_alias = {v: k for k, v in COLUMN_ALIASES.items()}.get(req)  # reverse
+        if req not in cols and (alias not in cols) and (rev_alias not in cols):
+            missing.append(req)
+    # Check price column (Price OR UnitPrice)
+    if 'Price' not in cols and 'UnitPrice' not in cols:
+        missing.append('Price / UnitPrice')
+    # Check customer column (Customer ID OR CustomerID)
+    if 'Customer ID' not in cols and 'CustomerID' not in cols:
+        missing.append('Customer ID / CustomerID')
+    return len(missing) == 0, missing
+
+
+def is_already_cleaned(df: pd.DataFrame) -> bool:
+    """Return True if the CSV is already in the cleaned format (has Revenue & CustomerID)."""
+    return 'Revenue' in df.columns and 'CustomerID' in df.columns and 'IsReturn' in df.columns
+
+
+def load_and_clean(uploaded_file) -> pd.DataFrame | None:
+    """Read CSV, rename columns if needed, then run clean_data() — or skip
+    cleaning if the file is already in the cleaned format.
+    """
+    try:
+        df_raw = pd.read_csv(uploaded_file, parse_dates=['InvoiceDate'])
+    except Exception as e:
+        st.error(f":material/cancel: Could not read file: {e}")
+        return None
+
+    ok, missing = validate_columns(df_raw)
+    if not ok:
+        st.error(
+            f":material/cancel: **Invalid file format.** Missing required columns: `{', '.join(missing)}`\n\n"
+            "Expected columns: `Invoice, StockCode, Description, Quantity, "
+            "InvoiceDate, Price (or UnitPrice), Customer ID (or CustomerID), Country`"
+        )
+        return None
+
+    # If the file is already cleaned (e.g. cleaned_retail_data.csv), skip re-cleaning
+    if is_already_cleaned(df_raw):
+        return df_raw
+
+    # Raw file — rename Price → UnitPrice then run cleaner
+    if 'Price' in df_raw.columns and 'UnitPrice' not in df_raw.columns:
+        df_raw = df_raw.rename(columns={'Price': 'UnitPrice'})
+
+    with st.spinner(":material/mop: Cleaning data..."):
+        df_clean = clean_data(df_raw)
+
+    return df_clean
+
+
+def require_data() -> bool:
+    """Show a prompt if no data is loaded yet. Returns True if data is ready."""
+    if st.session_state['df_clean'] is None:
+        st.info(":material/folder_open: Please upload a CSV file on the **:material/home: Data & Upload** page first.")
+        return False
+    return True
+
+
+# ══════════════════════════════════════════════════════════════════════
+# PAGE: DATA & UPLOAD
+# ══════════════════════════════════════════════════════════════════════
+
+if page == ":material/home: Data & Upload":
+    st.title(":material/analytics: Online Retail Analytics Platform")
+    st.markdown(
+        "Upload your monthly sales CSV and the platform will automatically "
+        "clean, analyse, and generate business recommendations."
+    )
+
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        st.markdown("### Upload Monthly Sales Data")
+        uploaded = st.file_uploader(
+            "Drop your CSV here (Online Retail II format)",
+            type=["csv"],
+            key="uploader",
+        )
+
+        st.markdown("— **OR** —")
+
+        if st.button("Load local default dataset (`data/cleaned_retail_data.csv`)"):
+            import os
+            default_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'cleaned_retail_data.csv')
+            if os.path.exists(default_path):
+                with st.spinner("Loading local file..."):
+                    df = pd.read_csv(default_path, parse_dates=['InvoiceDate'])
+                    st.session_state['df_clean'] = df
+                    st.session_state['filename'] = 'cleaned_retail_data.csv'
+                st.success(":material/check_circle: Local default dataset loaded successfully!")
+            else:
+                st.error(":material/cancel: `cleaned_retail_data.csv` not found in `data/`. Please run `01_data_exploration.ipynb` first.")
+
+        if uploaded:
+            df = load_and_clean(uploaded)
+            if df is not None:
+                st.session_state['df_clean'] = df
+                st.session_state['filename'] = uploaded.name
+                st.success(
+                    f":material/check_circle: **{uploaded.name}** loaded successfully — "
+                    f"**{len(df):,}** rows after cleaning."
+                )
+
+    with col2:
+        st.markdown("### Expected Format")
+        st.markdown("""
+| Column | Type |
+|--------|------|
+| `Invoice` | string |
+| `StockCode` | string |
+| `Description` | string |
+| `Quantity` | integer |
+| `InvoiceDate` | datetime |
+| `Price` | float |
+| `Customer ID` | float/str |
+| `Country` | string |
+        """)
+
+    # Show currently loaded file
+    if st.session_state['df_clean'] is not None:
+        st.markdown("---")
+        st.markdown(f"### :material/folder: Currently loaded: `{st.session_state['filename']}`")
+        df = st.session_state['df_clean']
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Rows (after cleaning)", f"{len(df):,}")
+        c2.metric("Columns", str(df.shape[1]))
+        c3.metric("Date range",
+                  f"{pd.to_datetime(df['InvoiceDate']).min().strftime('%b %Y')}"
+                  f" → {pd.to_datetime(df['InvoiceDate']).max().strftime('%b %Y')}"
+                  if 'InvoiceDate' in df.columns else 'N/A')
+        c4.metric("Countries", str(df['Country'].nunique()) if 'Country' in df.columns else 'N/A')
+
+        with st.expander("Preview first 50 rows"):
+            st.dataframe(df.head(50), use_container_width=True)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# PAGE: ANALYTICS DASHBOARD
+# ══════════════════════════════════════════════════════════════════════
+
+elif page == ":material/analytics: Analytics Dashboard":
+    st.title(":material/analytics: Analytics Dashboard")
+    if not require_data():
+        st.stop()
+
+    df = st.session_state['df_clean']
+
+    # ── KPIs ────────────────────────────────────────────────────────
+    kpis = get_kpi_summary(df)
+    cards = format_kpi_cards(kpis)
+
+    cols = st.columns(len(cards))
+    for col, card in zip(cols, cards):
+        col.metric(card['label'], card['value'])
+
+    st.markdown("---")
+
+    # ── Tabs ────────────────────────────────────────────────────────
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        ":material/calendar_month: Revenue Trends", ":material/inventory_2: Products", ":material/analytics: Returns", ":material/group: Customers", ":material/public: Geographic"
+    ])
+
+    with tab1:
+        monthly = get_monthly_revenue(df)
+        st.plotly_chart(plot_monthly_revenue(monthly), use_container_width=True)
+
+        c1, c2 = st.columns(2)
+        with c1:
+            dow = get_revenue_by_day_of_week(df)
+            st.plotly_chart(plot_revenue_by_day_of_week(dow), use_container_width=True)
+        with c2:
+            hourly = get_revenue_by_hour(df)
+            st.plotly_chart(plot_revenue_by_hour(hourly), use_container_width=True)
+
+    with tab2:
+        c1, c2 = st.columns(2)
+        with c1:
+            top_n = st.slider("Top N products", 5, 20, 10, key="top_n")
+            top = get_top_products(df, n=top_n)
+            st.plotly_chart(plot_top_products(top, n=top_n), use_container_width=True)
+        with c2:
+            worst = get_worst_products(df, n=10)
+            st.plotly_chart(plot_top_products(worst, n=10), use_container_width=True)
+            st.caption(":material/arrow_upward: Worst-selling products — consider repricing or discontinuation")
+
+    with tab3:
+        ret_summary = get_return_summary(df)
+        if ret_summary:
+            rc1, rc2, rc3 = st.columns(3)
+            rc1.metric("Return Transactions", f"{ret_summary.get('return_transactions', 0):,}")
+            rc2.metric("Return Rate", f"{ret_summary.get('return_rate_%', 0):.1f}%")
+            rc3.metric("Revenue Lost to Returns",
+                       f"£{ret_summary.get('revenue_lost_from_returns', 0):,.0f}")
+
+        ret_rate = get_product_return_rate(df)
+        st.plotly_chart(plot_product_return_rates(ret_rate, n=15), use_container_width=True)
+
+    with tab4:
+        with st.spinner("Computing RFM scores..."):
+            rfm = compute_rfm(df)
+            seg_summary = get_segment_summary(rfm)
+
+        # Segment overview
+        st.markdown("### Customer Segments")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.plotly_chart(plot_rfm_segments(seg_summary), use_container_width=True)
+        with c2:
+            st.plotly_chart(plot_segment_revenue_share(seg_summary), use_container_width=True)
+
+        st.dataframe(seg_summary.style.format({
+            'Avg_Recency_Days': '{:.0f}',
+            'Avg_Frequency':    '{:.1f}',
+            'Avg_Revenue':      '£{:,.0f}',
+            'Total_Revenue':    '£{:,.0f}',
+        }), use_container_width=True)
+
+        st.markdown("---")
+        
+        # Sub-tabs for more details
+        sub_tab1, sub_tab2, sub_tab3 = st.tabs([":material/attach_money: CLV", ":material/autorenew: New vs Returning", ":material/warning: Churn Risk"])
+        
+        with sub_tab1:
+            clv = get_customer_lifetime_value(df)
+            st.plotly_chart(plot_clv_distribution(clv), use_container_width=True)
+            if not clv.empty:
+                top10_pct = clv.head(max(1, int(len(clv) * 0.1)))
+                rev_share = top10_pct['TotalRevenue'].sum() / clv['TotalRevenue'].sum() * 100
+                st.info(f":material/emoji_events: Top 10% of customers generate **{rev_share:.1f}%** of total revenue")
+            with st.expander("Full CLV table"):
+                st.dataframe(clv.head(100), use_container_width=True)
+                
+        with sub_tab2:
+            new_ret = get_new_vs_returning_customers(df)
+            st.plotly_chart(plot_new_vs_returning(new_ret), use_container_width=True)
+            
+        with sub_tab3:
+            days = st.slider("Inactive for more than (days)", 30, 180, 90, step=15)
+            churned = get_churned_customers(df, days_threshold=days)
+            st.metric(f"Customers inactive {days}+ days", f"{len(churned):,}")
+            if not churned.empty:
+                st.dataframe(churned.head(50), use_container_width=True)
+                csv_export = churned.to_csv(index=False).encode()
+                st.download_button(
+                    ":material/download: Download churn list (CSV)",
+                    data=csv_export,
+                    file_name=f"churn_risk_{days}days.csv",
+                    mime="text/csv",
+                )
+
+    with tab5:
+        geo = get_country_performance(df)
+        exclude_uk = st.toggle("Exclude United Kingdom (avoids scale distortion)", value=True)
+        st.plotly_chart(plot_country_revenue(geo, exclude_uk=exclude_uk), use_container_width=True)
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            n = st.slider("Top N countries", 5, 20, 10, key="geo_n")
+            st.plotly_chart(plot_top_countries_bar(geo, n=n, exclude_uk=exclude_uk),
+                            use_container_width=True)
+        with c2:
+            st.markdown("### Country Table")
+            display_geo = geo[geo['Country'] != 'United Kingdom'] if exclude_uk else geo
+            st.dataframe(
+                display_geo.head(20).style.format({'Revenue': '£{:,.0f}'}),
+                use_container_width=True,
+            )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# PAGE: INSIGHTS & ACTIONS
+# ══════════════════════════════════════════════════════════════════════
+
+elif page == ":material/insights: Insights & Actions":
+    st.title(":material/insights: Insights & Actions")
+    if not require_data():
+        st.stop()
+
+    df = st.session_state['df_clean']
+
+    action_tab1, action_tab2 = st.tabs([":material/lightbulb: Recommendations", ":material/psychology: What-If Simulator"])
+
+    with action_tab1:
+        with st.spinner("Generating recommendations..."):
+            recs = generate_recommendations(df)
+
+        if not recs:
+            st.warning("Not enough data to generate recommendations.")
+        else:
+            # Summary counts
+            high   = [r for r in recs if r['priority'] == 'High']
+            medium = [r for r in recs if r['priority'] == 'Medium']
+            low    = [r for r in recs if r['priority'] == 'Low']
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total Recommendations", str(len(recs)))
+            c2.metric(":material/error: High Priority", str(len(high)))
+            c3.metric(":material/warning: Medium Priority", str(len(medium)))
+            c4.metric(":material/check_circle: Low Priority", str(len(low)))
+
+            st.markdown("---")
+
+            priority_filter = st.multiselect(
+                "Filter by priority", ["High", "Medium", "Low"],
+                default=["High", "Medium", "Low"],
+            )
+
+            for rec in recs:
+                if rec['priority'] not in priority_filter:
+                    continue
+
+                css_class = rec['priority'].lower()
+                svgs = {
+                    "High": '<svg style="vertical-align: middle; margin-right: 4px;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E71D36" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>',
+                    "Medium": '<svg style="vertical-align: middle; margin-right: 4px;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F7931E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
+                    "Low": '<svg style="vertical-align: middle; margin-right: 4px;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2EC4B6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>'
+                }
+                priority_svg = svgs.get(rec['priority'], '')
+                trending_up_svg = '<svg style="vertical-align: middle; margin-right: 4px;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6C63FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>'
+
+                st.markdown(f'''
+<div class="rec-card {css_class}">
+  <strong>{priority_svg} {rec['title']}</strong>
+  &nbsp;&nbsp;<span style="color:#8D99AE; font-size:0.85rem">{rec['type']} &middot; {rec['segment']}</span><br><br>
+  {rec['message']}<br><br>
+  <span style="color:#6C63FF; font-weight:600">{trending_up_svg} Estimated impact: ~+{rec['impact_pct']}% profit improvement</span>
+</div>
+''', unsafe_allow_html=True)
+
+            # Export recommendations as CSV
+            st.markdown("---")
+            rec_df = pd.DataFrame(recs)
+            st.download_button(
+                ":material/download: Export Recommendations (CSV)",
+                data=rec_df.to_csv(index=False).encode(),
+                file_name="recommendations.csv",
+                mime="text/csv",
+            )
+
+    with action_tab2:
+        kpis = get_kpi_summary(df)
+        base_revenue = kpis.get('total_revenue', 0)
+
+        st.markdown(
+            "Adjust the sliders below to simulate the revenue impact of business actions."
+        )
+
+        st.markdown("---")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### :material/analytics: Your Assumptions")
+            vip_retention = st.slider(
+                ":material/emoji_events: Improve VIP customer retention by", 0, 30, 10, step=1,
+                format="%d%%", help="% increase in repeat purchases from Champion segment"
+            )
+            winback_rate = st.slider(
+                ":material/autorenew: Win back At-Risk customers", 0, 50, 20, step=5,
+                format="%d%%", help="% of at-risk customers you re-engage"
+            )
+            return_reduction = st.slider(
+                ":material/inventory_2: Reduce product returns by", 0, 50, 15, step=5,
+                format="%d%%", help="% reduction in return transaction losses"
+            )
+            new_customer_growth = st.slider(
+                ":material/person_add: Increase new customer acquisition", 0, 30, 5, step=1,
+                format="%d%%", help="% more new customers per month"
+            )
+
+        with col2:
+            st.markdown("#### :material/lightbulb: Projected Impact")
+
+            # Advanced projection formulas (Phase 5.1 - Local RFM based)
+            rfm = compute_rfm(df)
+            
+            # Exact segment contributions
+            champions_revenue = rfm[rfm['Segment'] == 'Champions']['Monetary'].sum() if not rfm.empty else 0
+            loyal_revenue = rfm[rfm['Segment'] == 'Loyal Customers']['Monetary'].sum() if not rfm.empty else 0
+            vip_revenue = champions_revenue + loyal_revenue
+            
+            at_risk_revenue = rfm[rfm['Segment'] == 'At Risk']['Monetary'].sum() if not rfm.empty else 0
+            recent_revenue = rfm[rfm['Segment'] == 'Recent Customers']['Monetary'].sum() if not rfm.empty else 0
+            
+            # Fallbacks in case segment is empty but overall base_revenue is positive
+            if vip_revenue == 0 and base_revenue > 0:
+                vip_revenue = base_revenue * 0.30
+            if at_risk_revenue == 0 and base_revenue > 0:
+                at_risk_revenue = base_revenue * 0.10
+            if recent_revenue == 0 and base_revenue > 0:
+                recent_revenue = base_revenue * 0.05
+
+            ret_summary = get_return_summary(df)
+            revenue_lost_returns = ret_summary.get('revenue_lost_from_returns', 0)
+            
+            # Simulated gains
+            revenue_from_vip     = vip_revenue * (vip_retention / 100)
+            revenue_from_winback = at_risk_revenue * (winback_rate / 100)
+            revenue_from_returns = revenue_lost_returns * (return_reduction / 100)
+            revenue_from_new     = recent_revenue * (new_customer_growth / 100)
+            total_uplift         = revenue_from_vip + revenue_from_winback + revenue_from_returns + revenue_from_new
+
+            st.metric("Base Revenue", f"£{base_revenue:,.0f}")
+            st.metric("VIP Retention Uplift", f"+£{revenue_from_vip:,.0f}")
+            st.metric("Win-Back Revenue", f"+£{revenue_from_winback:,.0f}")
+            st.metric("Returns Savings", f"+£{revenue_from_returns:,.0f}")
+            st.metric("New Customer Revenue", f"+£{revenue_from_new:,.0f}")
+            st.markdown("---")
+            st.metric(":material/track_changes: Projected Total Revenue",
+                      f"£{base_revenue + total_uplift:,.0f}",
+                      delta=f"+£{total_uplift:,.0f} (+{total_uplift/base_revenue*100:.1f}%)"
+                      if base_revenue > 0 else None)
+
+        st.caption(
+            ":material/check_circle: These projections are dynamically calculated using the RFM segment distributions "
+            "of the currently loaded retail dataset."
+        )
+
+        # ── Excel Export (Phase 5.2) ────────────────────────────────
+        st.markdown("---")
+        st.markdown("### :material/download: Export Full Report")
+        st.markdown("Download a comprehensive Excel report including KPIs, customer segments, and recommendations.")
+
+        kpis_export = get_kpi_summary(df)
+        recs_export = generate_recommendations(df)
+        projections_export = {
+            "vip_retention_pct": vip_retention,
+            "winback_rate_pct": winback_rate,
+            "return_reduction_pct": return_reduction,
+            "new_customer_growth_pct": new_customer_growth,
+            "base_revenue": base_revenue,
+            "revenue_from_vip": revenue_from_vip,
+            "revenue_from_winback": revenue_from_winback,
+            "revenue_from_returns": revenue_from_returns,
+            "revenue_from_new": revenue_from_new,
+            "total_uplift": total_uplift,
+            "projected_revenue": base_revenue + total_uplift,
+        }
+
+        excel_bytes = generate_excel_report(df, kpis_export, recs_export, projections_export)
+        st.download_button(
+            ":material/download: Download Excel Report",
+            data=excel_bytes,
+            file_name="retail_analytics_report.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
