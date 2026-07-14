@@ -3,6 +3,11 @@ import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from src.theme import THEME
+
+
+def _theme_color(name: str) -> str:
+    return THEME[name].lstrip('#')
 
 def generate_excel_report(df: pd.DataFrame, kpis: dict, recs: list[dict], projections: dict = None) -> bytes:
     """
@@ -18,21 +23,21 @@ def generate_excel_report(df: pd.DataFrame, kpis: dict, recs: list[dict], projec
     wb = Workbook()
     
     # Setup Styles
-    header_fill = PatternFill(start_color="1A1D2E", end_color="1A1D2E", fill_type="solid")
-    header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color=_theme_color("text_primary"), end_color=_theme_color("text_primary"), fill_type="solid")
+    header_font = Font(name="Segoe UI", size=11, bold=True, color=_theme_color("page_bg"))
     
-    section_fill = PatternFill(start_color="F2F4F7", end_color="F2F4F7", fill_type="solid")
-    section_font = Font(name="Segoe UI", size=12, bold=True, color="1A1D2E")
+    section_fill = PatternFill(start_color=_theme_color("card_bg"), end_color=_theme_color("card_bg"), fill_type="solid")
+    section_font = Font(name="Segoe UI", size=12, bold=True, color=_theme_color("text_primary"))
     
     bold_font = Font(name="Segoe UI", size=10, bold=True)
     regular_font = Font(name="Segoe UI", size=10)
-    title_font = Font(name="Segoe UI", size=16, bold=True, color="6C63FF")
+    title_font = Font(name="Segoe UI", size=16, bold=True, color=_theme_color("accent"))
     
     thin_border = Border(
-        left=Side(style='thin', color='D3D3D3'),
-        right=Side(style='thin', color='D3D3D3'),
-        top=Side(style='thin', color='D3D3D3'),
-        bottom=Side(style='thin', color='D3D3D3')
+        left=Side(style='thin', color=_theme_color("border")),
+        right=Side(style='thin', color=_theme_color("border")),
+        top=Side(style='thin', color=_theme_color("border")),
+        bottom=Side(style='thin', color=_theme_color("border"))
     )
     
     # SHEET 1: Executive Summary
@@ -107,8 +112,8 @@ def generate_excel_report(df: pd.DataFrame, kpis: dict, recs: list[dict], projec
             
             # Draw highlight for final totals
             if label in ["Total Projected Uplift", "Projected Total Revenue"]:
-                ws1.cell(row=curr_row, column=1).font = Font(name="Segoe UI", size=10, bold=True, color="6C63FF")
-                cell.font = Font(name="Segoe UI", size=10, bold=True, color="6C63FF")
+                ws1.cell(row=curr_row, column=1).font = Font(name="Segoe UI", size=10, bold=True, color=_theme_color("accent"))
+                cell.font = Font(name="Segoe UI", size=10, bold=True, color=_theme_color("accent"))
             curr_row += 1
 
     # SHEET 2: Customer Segments
@@ -209,11 +214,11 @@ def generate_excel_report(df: pd.DataFrame, kpis: dict, recs: list[dict], projec
         # Priority specific coloring
         p_cell = ws3.cell(row=r_idx, column=1)
         if r.get("priority") == "High":
-            p_cell.font = Font(name="Segoe UI", size=10, bold=True, color="E71D36")
+            p_cell.font = Font(name="Segoe UI", size=10, bold=True, color=_theme_color("error"))
         elif r.get("priority") == "Medium":
-            p_cell.font = Font(name="Segoe UI", size=10, bold=True, color="F7931E")
+            p_cell.font = Font(name="Segoe UI", size=10, bold=True, color=_theme_color("warning"))
         else:
-            p_cell.font = Font(name="Segoe UI", size=10, bold=True, color="2EC4B6")
+            p_cell.font = Font(name="Segoe UI", size=10, bold=True, color=_theme_color("success"))
             
     # Auto-adjust column widths for all sheets
     for ws in [ws1, ws2, ws3]:

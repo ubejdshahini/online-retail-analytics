@@ -24,6 +24,7 @@ from src.visualisations import (
     plot_new_vs_returning, plot_country_revenue, plot_top_countries_bar,
     format_kpi_cards,
 )
+from src.theme import css_variables
 
 # Required columns for validation
 # Raw format uses 'Price' and 'Customer ID'; cleaned export uses 'UnitPrice' and 'CustomerID'
@@ -47,31 +48,39 @@ st.set_page_config(
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+:root {
+    __THEME_CSS_VARIABLES__
+}
 
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
-    background-color: #0F1117;
-    color: #EAEAEA;
+    background-color: var(--color-page-bg);
+    color: var(--color-text-primary);
 }
+[data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+    background: var(--color-page-bg);
+    color: var(--color-text-primary);
+}
+p, label, [data-testid="stCaptionContainer"] { color: var(--color-text-secondary); }
 
 /* Sidebar */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #1A1D2E 0%, #0F1117 100%);
-    border-right: 1px solid #2A2D3E;
+    background: var(--color-card-bg);
+    border-right: 1px solid var(--color-border);
 }
 [data-testid="stSidebar"] .block-container { padding-top: 2rem; }
 
 /* Metric cards */
 [data-testid="metric-container"] {
-    background: linear-gradient(135deg, #1E2130 0%, #252840 100%);
-    border: 1px solid #2A2D3E;
+    background: var(--color-card-bg);
+    border: 1px solid var(--color-border);
     border-radius: 12px;
     padding: 1rem 1.2rem;
     transition: transform 0.2s ease;
 }
 [data-testid="metric-container"]:hover { transform: translateY(-2px); }
 [data-testid="stMetricValue"], [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] p { 
-    color: #6C63FF !important; 
+    color: var(--color-accent) !important;
     font-size: 1.8rem !important; 
     word-break: break-word !important;
     overflow-wrap: break-word !important;
@@ -80,7 +89,7 @@ html, body, [class*="css"] {
     overflow: visible !important;
 }
 [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] > div, [data-testid="stMetricLabel"] p { 
-    color: #8D99AE !important; 
+    color: var(--color-text-secondary) !important;
     font-size: 0.85rem !important; 
     word-break: break-word !important;
     overflow-wrap: break-word !important;
@@ -90,13 +99,13 @@ html, body, [class*="css"] {
 }
 
 /* Section headers */
-h2 { color: #6C63FF; border-bottom: 1px solid #2A2D3E; padding-bottom: 0.4rem; word-wrap: break-word; }
-h3 { color: #EAEAEA; word-wrap: break-word; }
+h2 { color: var(--color-accent); border-bottom: 1px solid var(--color-border); padding-bottom: 0.4rem; word-wrap: break-word; }
+h3 { color: var(--color-text-primary); word-wrap: break-word; }
 
 /* Upload area */
 [data-testid="stFileUploader"] {
-    background: #1E2130;
-    border: 2px dashed #6C63FF;
+    background: var(--color-card-bg);
+    border: 2px dashed var(--color-accent);
     border-radius: 12px;
     padding: 1rem;
 }
@@ -105,14 +114,25 @@ h3 { color: #EAEAEA; word-wrap: break-word; }
 .stAlert { border-radius: 10px; word-wrap: break-word; }
 
 /* Tabs */
-.stTabs [data-baseweb="tab-list"] { background: #1E2130; border-radius: 10px; flex-wrap: wrap; }
-.stTabs [data-baseweb="tab"]      { color: #8D99AE; white-space: normal; text-align: center; }
-.stTabs [aria-selected="true"]    { color: #6C63FF !important; font-weight: 600; }
+.stTabs [data-baseweb="tab-list"] { background: var(--color-card-bg); border-radius: 10px; flex-wrap: wrap; }
+.stTabs [data-baseweb="tab"]      { color: var(--color-text-secondary); white-space: normal; text-align: center; }
+.stTabs [aria-selected="true"]    { color: var(--color-accent) !important; font-weight: 600; }
+
+.stButton > button { background: var(--color-accent); color: var(--color-page-bg); border-color: var(--color-accent); }
+.stButton > button:hover { background: var(--color-text-primary); color: var(--color-page-bg); border-color: var(--color-text-primary); }
+[data-baseweb="input"], [data-baseweb="select"] > div, textarea {
+    background: var(--color-card-bg) !important;
+    color: var(--color-text-primary) !important;
+    border-color: var(--color-border) !important;
+}
+[data-baseweb="radio"] div[role="radio"] { border-color: var(--color-border); }
+[data-baseweb="radio"] div[role="radio"][aria-checked="true"] { border-color: var(--color-accent); background: var(--color-accent); }
+hr { border-color: var(--color-border); }
 
 /* Recommendation cards */
 .rec-card {
-    background: linear-gradient(135deg, #1E2130 0%, #252840 100%);
-    border-left: 4px solid #6C63FF;
+    background: var(--color-card-bg);
+    border-left: 4px solid var(--color-accent);
     border-radius: 10px;
     padding: 1rem 1.2rem;
     margin-bottom: 1rem;
@@ -120,11 +140,11 @@ h3 { color: #EAEAEA; word-wrap: break-word; }
     overflow-wrap: break-word;
     white-space: normal;
 }
-.rec-card.high   { border-left-color: #E71D36; }
-.rec-card.medium { border-left-color: #F7931E; }
-.rec-card.low    { border-left-color: #2EC4B6; }
+.rec-card.high   { border-left-color: var(--color-error); }
+.rec-card.medium { border-left-color: var(--color-warning); }
+.rec-card.low    { border-left-color: var(--color-success); }
 </style>
-""", unsafe_allow_html=True)
+""".replace("__THEME_CSS_VARIABLES__", css_variables()), unsafe_allow_html=True)
 
 
 # SIDEBAR
@@ -469,19 +489,19 @@ elif page == ":material/insights: Insights & Actions":
 
                 css_class = rec['priority'].lower()
                 svgs = {
-                    "High": '<svg style="vertical-align: middle; margin-right: 4px;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E71D36" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>',
-                    "Medium": '<svg style="vertical-align: middle; margin-right: 4px;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F7931E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
-                    "Low": '<svg style="vertical-align: middle; margin-right: 4px;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2EC4B6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>'
+                    "High": '<svg style="vertical-align: middle; margin-right: 4px; color: var(--color-error);" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>',
+                    "Medium": '<svg style="vertical-align: middle; margin-right: 4px; color: var(--color-warning);" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
+                    "Low": '<svg style="vertical-align: middle; margin-right: 4px; color: var(--color-success);" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>'
                 }
                 priority_svg = svgs.get(rec['priority'], '')
-                trending_up_svg = '<svg style="vertical-align: middle; margin-right: 4px;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6C63FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>'
+                trending_up_svg = '<svg style="vertical-align: middle; margin-right: 4px; color: var(--color-accent);" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>'
 
                 st.markdown(f'''
 <div class="rec-card {css_class}">
   <strong>{priority_svg} {rec['title']}</strong>
-  &nbsp;&nbsp;<span style="color:#8D99AE; font-size:0.85rem">{rec['type']} &middot; {rec['segment']}</span><br><br>
+  &nbsp;&nbsp;<span style="color:var(--color-text-secondary); font-size:0.85rem">{rec['type']} &middot; {rec['segment']}</span><br><br>
   {rec['message']}<br><br>
-  <span style="color:#6C63FF; font-weight:600">{trending_up_svg} Estimated impact: ~+{rec['impact_pct']}% profit improvement</span>
+  <span style="color:var(--color-accent); font-weight:600">{trending_up_svg} Estimated impact: ~+{rec['impact_pct']}% profit improvement</span>
 </div>
 ''', unsafe_allow_html=True)
 
