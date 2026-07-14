@@ -185,6 +185,14 @@ if 'df_clean' not in st.session_state:
 if 'filename' not in st.session_state:
     st.session_state['filename'] = None
 
+# Older cleaned CSVs may contain numeric customer IDs plus the text "Guest".
+# Normalize existing session data as well as newly loaded files so Streamlit
+# can serialize every dataframe without Arrow type-conversion warnings.
+if st.session_state['df_clean'] is not None:
+    session_df = st.session_state['df_clean']
+    if 'CustomerID' in session_df.columns:
+        session_df['CustomerID'] = session_df['CustomerID'].fillna('Guest').astype(str)
+
 
 # HELPER FUNCTIONS
 
@@ -236,6 +244,7 @@ def load_and_clean(uploaded_file) -> pd.DataFrame | None:
 
     # If the file is already cleaned (e.g. cleaned_retail_data.csv), skip re-cleaning
     if is_already_cleaned(df_raw):
+        df_raw['CustomerID'] = df_raw['CustomerID'].fillna('Guest').astype(str)
         return df_raw
 
     # Raw file — rename Price → UnitPrice then run cleaner
@@ -283,6 +292,8 @@ if page == ":material/home: Data & Upload":
             if os.path.exists(default_path):
                 with st.spinner("Loading local file..."):
                     df = pd.read_csv(default_path, parse_dates=['InvoiceDate'])
+                    if 'CustomerID' in df.columns:
+                        df['CustomerID'] = df['CustomerID'].fillna('Guest').astype(str)
                     st.session_state['df_clean'] = df
                     st.session_state['filename'] = 'cleaned_retail_data.csv'
                 st.success(":material/check_circle: Local default dataset loaded successfully!")
@@ -329,7 +340,7 @@ if page == ":material/home: Data & Upload":
         c4.metric("Countries", str(df['Country'].nunique()) if 'Country' in df.columns else 'N/A')
 
         with st.expander("Preview first 50 rows"):
-            st.dataframe(df.head(50), use_container_width=True)
+            st.dataframe(df.head(50), width='stretch')
 
 
 # PAGE: ANALYTICS DASHBOARD
@@ -358,25 +369,25 @@ elif page == ":material/analytics: Analytics Dashboard":
 
     with tab1:
         monthly = get_monthly_revenue(df)
-        st.plotly_chart(plot_monthly_revenue(monthly), use_container_width=True)
+        st.plotly_chart(plot_monthly_revenue(monthly), width='stretch')
 
         c1, c2 = st.columns(2)
         with c1:
             dow = get_revenue_by_day_of_week(df)
-            st.plotly_chart(plot_revenue_by_day_of_week(dow), use_container_width=True)
+            st.plotly_chart(plot_revenue_by_day_of_week(dow), width='stretch')
         with c2:
             hourly = get_revenue_by_hour(df)
-            st.plotly_chart(plot_revenue_by_hour(hourly), use_container_width=True)
+            st.plotly_chart(plot_revenue_by_hour(hourly), width='stretch')
 
     with tab2:
         c1, c2 = st.columns(2)
         with c1:
             top_n = st.slider("Top N products", 5, 20, 10, key="top_n")
             top = get_top_products(df, n=top_n)
-            st.plotly_chart(plot_top_products(top, n=top_n), use_container_width=True)
+            st.plotly_chart(plot_top_products(top, n=top_n), width='stretch')
         with c2:
             worst = get_worst_products(df, n=10)
-            st.plotly_chart(plot_top_products(worst, n=10), use_container_width=True)
+            st.plotly_chart(plot_top_products(worst, n=10), width='stretch')
             st.caption(":material/arrow_upward: Worst-selling products — consider repricing or discontinuation")
 
     with tab3:
@@ -389,7 +400,7 @@ elif page == ":material/analytics: Analytics Dashboard":
                        f"£{ret_summary.get('revenue_lost_from_returns', 0):,.0f}")
 
         ret_rate = get_product_return_rate(df)
-        st.plotly_chart(plot_product_return_rates(ret_rate, n=15), use_container_width=True)
+        st.plotly_chart(plot_product_return_rates(ret_rate, n=15), width='stretch')
 
     with tab4:
         with st.spinner("Computing RFM scores..."):
@@ -400,16 +411,16 @@ elif page == ":material/analytics: Analytics Dashboard":
         st.markdown("### Customer Segments")
         c1, c2 = st.columns(2)
         with c1:
-            st.plotly_chart(plot_rfm_segments(seg_summary), use_container_width=True)
+            st.plotly_chart(plot_rfm_segments(seg_summary), width='stretch')
         with c2:
-            st.plotly_chart(plot_segment_revenue_share(seg_summary), use_container_width=True)
+            st.plotly_chart(plot_segment_revenue_share(seg_summary), width='stretch')
 
         st.dataframe(seg_summary.style.format({
             'Avg_Recency_Days': '{:.0f}',
             'Avg_Frequency':    '{:.1f}',
             'Avg_Revenue':      '£{:,.0f}',
             'Total_Revenue':    '£{:,.0f}',
-        }), use_container_width=True)
+        }), width='stretch')
 
         st.markdown("---")
         
@@ -418,24 +429,24 @@ elif page == ":material/analytics: Analytics Dashboard":
         
         with sub_tab1:
             clv = get_customer_lifetime_value(df)
-            st.plotly_chart(plot_clv_distribution(clv), use_container_width=True)
+            st.plotly_chart(plot_clv_distribution(clv), width='stretch')
             if not clv.empty:
                 top10_pct = clv.head(max(1, int(len(clv) * 0.1)))
                 rev_share = top10_pct['TotalRevenue'].sum() / clv['TotalRevenue'].sum() * 100
                 st.info(f":material/emoji_events: Top 10% of customers generate **{rev_share:.1f}%** of total revenue")
             with st.expander("Full CLV table"):
-                st.dataframe(clv.head(100), use_container_width=True)
+                st.dataframe(clv.head(100), width='stretch')
                 
         with sub_tab2:
             new_ret = get_new_vs_returning_customers(df)
-            st.plotly_chart(plot_new_vs_returning(new_ret), use_container_width=True)
+            st.plotly_chart(plot_new_vs_returning(new_ret), width='stretch')
             
         with sub_tab3:
             days = st.slider("Inactive for more than (days)", 30, 180, 90, step=15)
             churned = get_churned_customers(df, days_threshold=days)
             st.metric(f"Customers inactive {days}+ days", f"{len(churned):,}")
             if not churned.empty:
-                st.dataframe(churned.head(50), use_container_width=True)
+                st.dataframe(churned.head(50), width='stretch')
                 csv_export = churned.to_csv(index=False).encode()
                 st.download_button(
                     ":material/download: Download churn list (CSV)",
@@ -447,18 +458,18 @@ elif page == ":material/analytics: Analytics Dashboard":
     with tab5:
         geo = get_country_performance(df)
         exclude_uk = st.toggle("Exclude United Kingdom (avoids scale distortion)", value=True)
-        st.plotly_chart(plot_country_revenue(geo, exclude_uk=exclude_uk), use_container_width=True)
+        st.plotly_chart(plot_country_revenue(geo, exclude_uk=exclude_uk), width='stretch')
         c1, c2 = st.columns([2, 1])
         with c1:
             n = st.slider("Top N countries", 5, 20, 10, key="geo_n")
             st.plotly_chart(plot_top_countries_bar(geo, n=n, exclude_uk=exclude_uk),
-                            use_container_width=True)
+                            width='stretch')
         with c2:
             st.markdown("### Country Table")
             display_geo = geo[geo['Country'] != 'United Kingdom'] if exclude_uk else geo
             st.dataframe(
                 display_geo.head(20).style.format({'Revenue': '£{:,.0f}'}),
-                use_container_width=True,
+                width='stretch',
             )
 
 

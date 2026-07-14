@@ -140,13 +140,29 @@ def plot_top_products(top_df: pd.DataFrame, n: int = 10) -> go.Figure:
 
 
 def plot_product_return_rates(return_df: pd.DataFrame, n: int = 15) -> go.Figure:
-    """Bar chart: products with highest return rates."""
+    """Bar chart: products with highest return rates, grouped by risk level."""
     if return_df.empty:
         return go.Figure()
 
-    df = return_df.head(n).sort_values('ReturnRate_%')
-    colors = [COLORS['danger'] if v > 30 else COLORS['secondary']
-              if v > 15 else COLORS['neutral'] for v in df['ReturnRate_%']]
+    df = return_df.head(n).sort_values('ReturnRate_%').copy()
+
+    # A single set of risk bands is easier to interpret than bar colours that
+    # conflict with a separate threshold line.
+    risk_bands = [
+        (35, 'Critical (35%+)', '#B91C1C'),
+        (25, 'High (25–34.9%)', '#EA580C'),
+        (15, 'Elevated (15–24.9%)', '#D97706'),
+        (0, 'Normal (<15%)', '#64748B'),
+    ]
+
+    def classify(rate: float) -> tuple[str, str]:
+        for lower_bound, label, color in risk_bands:
+            if rate >= lower_bound:
+                return label, color
+
+    risk = df['ReturnRate_%'].apply(classify)
+    df['Risk'] = risk.str[0]
+    colors = risk.str[1]
 
     fig = go.Figure(go.Bar(
         x=df['ReturnRate_%'], y=df['Description'],
@@ -154,12 +170,42 @@ def plot_product_return_rates(return_df: pd.DataFrame, n: int = 15) -> go.Figure
         marker_color=colors,
         text=df['ReturnRate_%'].apply(lambda v: f'{v:.1f}%'),
         textposition='auto',
+        customdata=df[['Risk']],
+        hovertemplate=(
+            '<b>%{y}</b><br>Return rate: %{x:.1f}%'
+            '<br>Risk level: %{customdata[0]}<extra></extra>'
+        ),
+        showlegend=False,
     ))
-    # Reference line at 20%
-    fig.add_vline(x=20, line_dash='dash', line_color=COLORS['danger'],
-                  annotation_text='20% threshold', annotation_position='top right')
-    fig.update_yaxes(tickfont=dict(size=11))
-    return _apply_base(fig, 'Product Return Rates (top offenders)')
+
+    # Invisible point traces provide a compact, explicit legend for the bar
+    # colours without splitting the ordered bars into separate traces.
+    for _, label, color in reversed(risk_bands):
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode='markers', name=label,
+            marker=dict(size=10, color=color, symbol='square'),
+            hoverinfo='skip',
+        ))
+
+    fig = _apply_base(
+        fig,
+        'Product Return Rates — higher rates indicate greater risk'
+    )
+    fig.update_xaxes(title_text='Return rate', ticksuffix='%', rangemode='tozero')
+    fig.update_yaxes(tickfont=dict(size=11), showgrid=False)
+    fig.update_layout(
+        legend=dict(
+            title=dict(text='Risk level', font=dict(size=13)),
+            orientation='v',
+            yanchor='top', y=1,
+            xanchor='left', x=1.01,
+            font=dict(size=12),
+            itemsizing='constant',
+            tracegroupgap=8,
+        ),
+        margin=dict(l=40, r=210, t=60, b=55),
+    )
+    return fig
 
 
 # CUSTOMER CHARTS
