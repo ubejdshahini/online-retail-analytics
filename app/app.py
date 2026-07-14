@@ -109,6 +109,15 @@ h3 { color: var(--color-text-primary); word-wrap: break-word; }
     border-radius: 12px;
     padding: 1rem;
 }
+[data-testid="stFileUploaderDropzone"] {
+    background: var(--color-card-bg);
+    border-color: var(--color-border);
+}
+[data-testid="stFileUploaderDropzone"] button {
+    background: var(--color-page-bg);
+    color: var(--color-accent);
+    border-color: var(--color-border);
+}
 
 /* Info / warning / success boxes */
 .stAlert { border-radius: 10px; word-wrap: break-word; }
@@ -119,7 +128,9 @@ h3 { color: var(--color-text-primary); word-wrap: break-word; }
 .stTabs [aria-selected="true"]    { color: var(--color-accent) !important; font-weight: 600; }
 
 .stButton > button { background: var(--color-accent); color: var(--color-page-bg); border-color: var(--color-accent); }
+.stButton > button p { color: var(--color-page-bg); }
 .stButton > button:hover { background: var(--color-text-primary); color: var(--color-page-bg); border-color: var(--color-text-primary); }
+.stButton > button:hover p { color: var(--color-page-bg); }
 [data-baseweb="input"], [data-baseweb="select"] > div, textarea {
     background: var(--color-card-bg) !important;
     color: var(--color-text-primary) !important;
@@ -128,6 +139,10 @@ h3 { color: var(--color-text-primary); word-wrap: break-word; }
 [data-baseweb="radio"] div[role="radio"] { border-color: var(--color-border); }
 [data-baseweb="radio"] div[role="radio"][aria-checked="true"] { border-color: var(--color-accent); background: var(--color-accent); }
 hr { border-color: var(--color-border); }
+code {
+    background: var(--color-accent-tint);
+    color: var(--color-text-primary);
+}
 
 /* Recommendation cards */
 .rec-card {
