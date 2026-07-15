@@ -12,9 +12,12 @@ import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.data_cleaning import clean_data
-from src.analysis import get_kpi_summary, get_return_summary, get_monthly_revenue
+from src.analysis import (
+    get_kpi_summary, get_return_summary, get_monthly_revenue,
+    get_revenue_by_hour,
+)
 from src.recommendation_engine import compute_rfm, get_segment_summary, generate_recommendations
-from src.visualisations import plot_monthly_revenue
+from src.visualisations import plot_monthly_revenue, plot_revenue_by_hour
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────
@@ -246,3 +249,13 @@ class TestMonthlyRevenueVisualisation:
         assert 'MoM Growth %' not in trace_names
         assert fig.layout.title.text == 'Monthly Revenue & Order Volume'
         assert fig.layout.yaxis2.title.text == 'Orders'
+
+
+class TestHourlyRevenueVisualisation:
+    def test_uses_two_lines_without_area_fill(self, cleaned_df):
+        hourly = get_revenue_by_hour(cleaned_df)
+        fig = plot_revenue_by_hour(hourly)
+
+        assert len(fig.data) == 2
+        assert all(trace.fill in (None, 'none') for trace in fig.data)
+        assert all(trace.mode == 'lines+markers' for trace in fig.data)

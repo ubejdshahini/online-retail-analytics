@@ -103,15 +103,14 @@ def plot_revenue_by_hour(hourly_df: pd.DataFrame) -> go.Figure:
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_trace(go.Scatter(
         x=hourly_df['Hour'], y=hourly_df['Revenue'],
-        name='Revenue (£)', fill='tozeroy',
+        name='Revenue (£)', mode='lines+markers',
         line=dict(color=COLORS['primary'], width=2),
-        fillcolor=COLORS['primary'],
-        opacity=0.25,
+        marker=dict(size=5),
     ), secondary_y=False)
     fig.add_trace(go.Scatter(
         x=hourly_df['Hour'], y=hourly_df['Transactions'],
         name='Transactions', mode='lines+markers',
-        line=dict(color=COLORS['secondary'], width=2, dash='dot'),
+        line=dict(color=COLORS['secondary'], width=2),
         marker=dict(size=5),
     ), secondary_y=True)
     fig.update_xaxes(title_text='Hour of Day', dtick=1)
