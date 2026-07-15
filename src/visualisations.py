@@ -7,24 +7,23 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
+from src.theme import CHART_COLORS, THEME
 
 
 # ── Colour palette (consistent across all charts) ──────────────────────
 COLORS = {
-    'primary':    '#6C63FF',
-    'secondary':  '#F7931E',
-    'success':    '#2EC4B6',
-    'danger':     '#E71D36',
-    'neutral':    '#8D99AE',
-    'background': '#0F1117',
-    'surface':    '#1E2130',
-    'text':       '#EAEAEA',
+    'primary':    THEME['accent'],
+    'secondary':  THEME['warning'],
+    'success':    THEME['success'],
+    'danger':     THEME['error'],
+    'neutral':    CHART_COLORS[5],
+    'background': THEME['page_bg'],
+    'surface':    THEME['card_bg'],
+    'text':       THEME['text_primary'],
+    'border':     THEME['border'],
 }
 
-PALETTE = [
-    '#6C63FF', '#F7931E', '#2EC4B6', '#E71D36',
-    '#A8DADC', '#FFB347', '#B5E48C', '#FF6B6B',
-]
+PALETTE = list(CHART_COLORS)
 
 BASE_LAYOUT = dict(
     paper_bgcolor=COLORS['background'],
@@ -38,8 +37,8 @@ BASE_LAYOUT = dict(
 def _apply_base(fig: go.Figure, title: str) -> go.Figure:
     fig.update_layout(title=dict(text=title, font=dict(size=18, color=COLORS['text'])),
                       **BASE_LAYOUT)
-    fig.update_xaxes(showgrid=True, gridcolor='#2A2D3E', zeroline=False)
-    fig.update_yaxes(showgrid=True, gridcolor='#2A2D3E', zeroline=False)
+    fig.update_xaxes(showgrid=True, gridcolor=COLORS['border'], zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor=COLORS['border'], zeroline=False)
     return fig
 
 
@@ -89,11 +88,7 @@ def plot_revenue_by_day_of_week(dow_df: pd.DataFrame) -> go.Figure:
         x=dow_df['Revenue'],
         y=dow_df['DayOfWeek'],
         orientation='h',
-        marker=dict(
-            color=dow_df['Revenue'],
-            colorscale=[[0, '#2A2D3E'], [1, COLORS['primary']]],
-            showscale=False,
-        ),
+        marker_color=COLORS['primary'],
         text=dow_df['Revenue'].apply(lambda v: f'£{v:,.0f}'),
         textposition='auto',
     ))
@@ -110,7 +105,8 @@ def plot_revenue_by_hour(hourly_df: pd.DataFrame) -> go.Figure:
         x=hourly_df['Hour'], y=hourly_df['Revenue'],
         name='Revenue (£)', fill='tozeroy',
         line=dict(color=COLORS['primary'], width=2),
-        fillcolor='rgba(108,99,255,0.2)',
+        fillcolor=COLORS['primary'],
+        opacity=0.25,
     ), secondary_y=False)
     fig.add_trace(go.Scatter(
         x=hourly_df['Hour'], y=hourly_df['Transactions'],
@@ -144,13 +140,29 @@ def plot_top_products(top_df: pd.DataFrame, n: int = 10) -> go.Figure:
 
 
 def plot_product_return_rates(return_df: pd.DataFrame, n: int = 15) -> go.Figure:
-    """Bar chart: products with highest return rates."""
+    """Bar chart: products with highest return rates, grouped by risk level."""
     if return_df.empty:
         return go.Figure()
 
-    df = return_df.head(n).sort_values('ReturnRate_%')
-    colors = [COLORS['danger'] if v > 30 else COLORS['secondary']
-              if v > 15 else COLORS['neutral'] for v in df['ReturnRate_%']]
+    df = return_df.head(n).sort_values('ReturnRate_%').copy()
+
+    # A single set of risk bands is easier to interpret than bar colours that
+    # conflict with a separate threshold line.
+    risk_bands = [
+        (35, 'Critical (35%+)', '#B91C1C'),
+        (25, 'High (25–34.9%)', '#EA580C'),
+        (15, 'Elevated (15–24.9%)', '#D97706'),
+        (0, 'Normal (<15%)', '#64748B'),
+    ]
+
+    def classify(rate: float) -> tuple[str, str]:
+        for lower_bound, label, color in risk_bands:
+            if rate >= lower_bound:
+                return label, color
+
+    risk = df['ReturnRate_%'].apply(classify)
+    df['Risk'] = risk.str[0]
+    colors = risk.str[1]
 
     fig = go.Figure(go.Bar(
         x=df['ReturnRate_%'], y=df['Description'],
@@ -158,12 +170,42 @@ def plot_product_return_rates(return_df: pd.DataFrame, n: int = 15) -> go.Figure
         marker_color=colors,
         text=df['ReturnRate_%'].apply(lambda v: f'{v:.1f}%'),
         textposition='auto',
+        customdata=df[['Risk']],
+        hovertemplate=(
+            '<b>%{y}</b><br>Return rate: %{x:.1f}%'
+            '<br>Risk level: %{customdata[0]}<extra></extra>'
+        ),
+        showlegend=False,
     ))
-    # Reference line at 20%
-    fig.add_vline(x=20, line_dash='dash', line_color=COLORS['danger'],
-                  annotation_text='20% threshold', annotation_position='top right')
-    fig.update_yaxes(tickfont=dict(size=11))
-    return _apply_base(fig, 'Product Return Rates (top offenders)')
+
+    # Invisible point traces provide a compact, explicit legend for the bar
+    # colours without splitting the ordered bars into separate traces.
+    for _, label, color in reversed(risk_bands):
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode='markers', name=label,
+            marker=dict(size=10, color=color, symbol='square'),
+            hoverinfo='skip',
+        ))
+
+    fig = _apply_base(
+        fig,
+        'Product Return Rates — higher rates indicate greater risk'
+    )
+    fig.update_xaxes(title_text='Return rate', ticksuffix='%', rangemode='tozero')
+    fig.update_yaxes(tickfont=dict(size=11), showgrid=False)
+    fig.update_layout(
+        legend=dict(
+            title=dict(text='Risk level', font=dict(size=13)),
+            orientation='v',
+            yanchor='top', y=1,
+            xanchor='left', x=1.01,
+            font=dict(size=12),
+            itemsizing='constant',
+            tracegroupgap=8,
+        ),
+        margin=dict(l=40, r=210, t=60, b=55),
+    )
+    return fig
 
 
 # CUSTOMER CHARTS
@@ -189,7 +231,7 @@ def plot_rfm_segments(seg_summary: pd.DataFrame) -> go.Figure:
                 size=max(row['Customers'] / seg_summary['Customers'].max() * 80, 12),
                 color=PALETTE[i % len(PALETTE)],
                 opacity=0.85,
-                line=dict(width=1, color='white'),
+                line=dict(width=1, color=COLORS['background']),
             ),
         ))
     fig.update_xaxes(title_text='Avg Days Since Last Purchase (Recency ↑ = worse)')
@@ -277,9 +319,8 @@ def plot_country_revenue(geo_df: pd.DataFrame, exclude_uk: bool = True) -> go.Fi
         locations='Country',
         locationmode='country names',
         color='Revenue',
-        color_continuous_scale=[
-            [0, '#1E2130'], [0.3, '#6C63FF'], [0.7, '#F7931E'], [1, '#FFD700']
-        ],
+        color_continuous_scale=[[i / (len(PALETTE) - 1), color]
+                                for i, color in enumerate(PALETTE)],
         hover_data={'Revenue': ':,.0f'},
         labels={'Revenue': 'Revenue (£)'},
     )
@@ -287,7 +328,7 @@ def plot_country_revenue(geo_df: pd.DataFrame, exclude_uk: bool = True) -> go.Fi
         geo=dict(
             bgcolor=COLORS['background'],
             lakecolor=COLORS['background'],
-            landcolor='#2A2D3E',
+            landcolor=THEME['border'],
             showframe=False,
         ),
         coloraxis_colorbar=dict(title='Revenue (£)'),
@@ -314,11 +355,7 @@ def plot_top_countries_bar(geo_df: pd.DataFrame, n: int = 10,
     fig = go.Figure(go.Bar(
         x=df['Revenue'], y=df['Country'],
         orientation='h',
-        marker=dict(
-            color=df['Revenue'],
-            colorscale=[[0, '#2A2D3E'], [1, COLORS['secondary']]],
-            showscale=False,
-        ),
+        marker_color=COLORS['secondary'],
         text=df['Revenue'].apply(lambda v: f'£{v:,.0f}'),
         textposition='auto',
     ))

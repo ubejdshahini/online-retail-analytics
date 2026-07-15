@@ -33,7 +33,10 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     if 'Customer ID' in df_clean.columns:
         df_clean.rename(columns={'Customer ID': 'CustomerID'}, inplace=True)
     if 'CustomerID' in df_clean.columns:
-        df_clean['CustomerID'] = df_clean['CustomerID'].fillna('Guest')
+        # Keep the whole column on one Arrow-compatible type. Mixing numeric
+        # IDs with the string "Guest" makes Streamlit repeatedly log a
+        # dataframe serialization warning.
+        df_clean['CustomerID'] = df_clean['CustomerID'].fillna('Guest').astype(str)
 
     # 2. Normalise column name: 'Price' (UCI raw format) → 'UnitPrice'
     if 'Price' in df_clean.columns and 'UnitPrice' not in df_clean.columns:
