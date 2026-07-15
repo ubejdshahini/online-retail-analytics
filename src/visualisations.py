@@ -79,6 +79,103 @@ def plot_monthly_revenue(monthly_df: pd.DataFrame) -> go.Figure:
     return _apply_base(fig, 'Monthly Revenue & Order Volume')
 
 
+def plot_monthly_product_revenue(product_monthly_df: pd.DataFrame) -> go.Figure:
+    """Small-multiple monthly revenue trends for the dataset's top products."""
+    if product_monthly_df.empty:
+        return go.Figure()
+
+    products = product_monthly_df['Description'].drop_duplicates().tolist()
+    column_count = 2
+    row_count = int(np.ceil(len(products) / column_count))
+    subplot_titles = []
+    for product in products:
+        product_total = product_monthly_df.loc[
+            product_monthly_df['Description'] == product, 'Revenue'
+        ].sum()
+        display_name = product if len(product) <= 34 else f'{product[:31]}...'
+        subplot_titles.append(
+            f'<b>{display_name}</b>  ·  Total £{product_total:,.0f}'
+        )
+
+    fig = make_subplots(
+        rows=row_count,
+        cols=column_count,
+        subplot_titles=subplot_titles,
+        horizontal_spacing=0.10,
+        vertical_spacing=min(0.14, 0.32 / row_count),
+    )
+
+    for index, product in enumerate(products):
+        row = index // column_count + 1
+        column = index % column_count + 1
+        color = PALETTE[index % len(PALETTE)]
+        product_data = product_monthly_df[
+            product_monthly_df['Description'] == product
+        ]
+        peak_revenue = product_data['Revenue'].max()
+        marker_colors = [
+            COLORS['secondary'] if value == peak_revenue else color
+            for value in product_data['Revenue']
+        ]
+        marker_sizes = [
+            10 if value == peak_revenue else 4
+            for value in product_data['Revenue']
+        ]
+
+        fig.add_trace(go.Scatter(
+            x=product_data['YearMonth'],
+            y=product_data['Revenue'],
+            name=product,
+            mode='lines+markers',
+            line=dict(color=color, width=3, shape='spline', smoothing=0.35),
+            marker=dict(
+                color=marker_colors,
+                size=marker_sizes,
+                line=dict(color=COLORS['surface'], width=1),
+            ),
+            hovertemplate=(
+                f'<b>{product}</b><br>'
+                'Month: %{x}<br>'
+                'Revenue: £%{y:,.0f}<extra></extra>'
+            ),
+            showlegend=False,
+        ), row=row, col=column)
+
+    fig = _apply_base(fig, 'Monthly Revenue Patterns by Product')
+    fig.update_layout(
+        height=max(560, row_count * 245 + 100),
+        showlegend=False,
+        margin=dict(l=70, r=40, t=95, b=70),
+    )
+    fig.update_annotations(font=dict(size=13, color=COLORS['text']))
+    fig.update_xaxes(tickangle=-35, showgrid=False)
+    fig.update_yaxes(
+        tickprefix='£',
+        tickformat='~s',
+        rangemode='tozero',
+        gridcolor=COLORS['border'],
+    )
+
+    # Show month labels only on the lowest populated chart in each column.
+    last_row_by_column = {
+        1: row_count,
+        2: row_count if len(products) % 2 == 0 else max(1, row_count - 1),
+    }
+    for index in range(len(products)):
+        row = index // column_count + 1
+        column = index % column_count + 1
+        fig.update_xaxes(
+            showticklabels=row == last_row_by_column[column],
+            row=row,
+            col=column,
+        )
+
+    if len(products) % 2:
+        fig.update_xaxes(visible=False, row=row_count, col=2)
+        fig.update_yaxes(visible=False, row=row_count, col=2)
+    return fig
+
+
 def plot_revenue_by_day_of_week(dow_df: pd.DataFrame) -> go.Figure:
     """Horizontal bar chart: revenue by day of week."""
     if dow_df.empty:

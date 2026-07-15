@@ -28,6 +28,58 @@ def get_monthly_revenue(df: pd.DataFrame) -> pd.DataFrame:
     return monthly
 
 
+def get_monthly_product_revenue(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
+    """Return monthly net revenue for the top ``n`` products by total revenue."""
+    required = {'InvoiceDate', 'Description', 'Revenue'}
+    if not required.issubset(df.columns) or df.empty or n < 1:
+        return pd.DataFrame(columns=['YearMonth', 'Description', 'Revenue'])
+
+    product_df = df.loc[:, ['InvoiceDate', 'Description', 'Revenue']].copy()
+    product_df['InvoiceDate'] = pd.to_datetime(product_df['InvoiceDate'], errors='coerce')
+    product_df = product_df.dropna(subset=['InvoiceDate', 'Description', 'Revenue'])
+    if product_df.empty:
+        return pd.DataFrame(columns=['YearMonth', 'Description', 'Revenue'])
+
+    product_df['Description'] = product_df['Description'].astype(str).str.strip()
+    product_df = product_df[product_df['Description'] != '']
+
+    top_products = (
+        product_df.groupby('Description')['Revenue']
+        .sum()
+        .sort_values(ascending=False)
+        .head(n)
+        .index
+        .tolist()
+    )
+    if not top_products:
+        return pd.DataFrame(columns=['YearMonth', 'Description', 'Revenue'])
+
+    product_df = product_df[product_df['Description'].isin(top_products)].copy()
+    product_df['YearMonth'] = product_df['InvoiceDate'].dt.to_period('M')
+
+    monthly = (
+        product_df.groupby(['YearMonth', 'Description'])['Revenue']
+        .sum()
+        .reindex(
+            pd.MultiIndex.from_product(
+                [
+                    pd.period_range(
+                        product_df['YearMonth'].min(),
+                        product_df['YearMonth'].max(),
+                        freq='M',
+                    ),
+                    top_products,
+                ],
+                names=['YearMonth', 'Description'],
+            ),
+            fill_value=0,
+        )
+        .reset_index()
+    )
+    monthly['YearMonth'] = monthly['YearMonth'].astype(str)
+    return monthly
+
+
 def get_daily_revenue(df: pd.DataFrame) -> pd.DataFrame:
     """Returns revenue per day — useful for spotting peak days."""
     if 'InvoiceDate' not in df.columns or 'Revenue' not in df.columns:

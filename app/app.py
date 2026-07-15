@@ -9,7 +9,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.data_cleaning import clean_data
 from src.analysis import (
-    get_kpi_summary, get_monthly_revenue, get_revenue_by_hour,
+    get_kpi_summary, get_monthly_revenue, get_monthly_product_revenue,
+    get_revenue_by_hour,
     get_revenue_by_day_of_week, get_top_products, get_worst_products,
     get_product_return_rate, get_country_performance,
     get_customer_lifetime_value, get_new_vs_returning_customers,
@@ -18,7 +19,8 @@ from src.analysis import (
 from src.recommendation_engine import compute_rfm, get_segment_summary, generate_recommendations
 from src.export_utils import generate_excel_report
 from src.visualisations import (
-    plot_monthly_revenue, plot_revenue_by_hour, plot_revenue_by_day_of_week,
+    plot_monthly_revenue, plot_monthly_product_revenue,
+    plot_revenue_by_hour, plot_revenue_by_day_of_week,
     plot_top_products, plot_product_return_rates,
     plot_rfm_segments, plot_segment_revenue_share, plot_clv_distribution,
     plot_new_vs_returning, plot_country_revenue, plot_top_countries_bar,
@@ -370,6 +372,19 @@ elif page == ":material/analytics: Analytics Dashboard":
     with tab1:
         monthly = get_monthly_revenue(df)
         st.plotly_chart(plot_monthly_revenue(monthly), width='stretch')
+
+        product_count = st.slider(
+            "Products to compare by month",
+            min_value=3,
+            max_value=10,
+            value=4,
+            key="monthly_product_count",
+        )
+        monthly_products = get_monthly_product_revenue(df, n=product_count)
+        st.plotly_chart(
+            plot_monthly_product_revenue(monthly_products),
+            width='stretch',
+        )
 
         c1, c2 = st.columns(2)
         with c1:

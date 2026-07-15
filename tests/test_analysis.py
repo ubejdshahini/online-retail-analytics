@@ -14,10 +14,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from src.data_cleaning import clean_data
 from src.analysis import (
     get_kpi_summary, get_return_summary, get_monthly_revenue,
-    get_revenue_by_hour,
+    get_monthly_product_revenue, get_revenue_by_hour,
 )
 from src.recommendation_engine import compute_rfm, get_segment_summary, generate_recommendations
-from src.visualisations import plot_monthly_revenue, plot_revenue_by_hour
+from src.visualisations import (
+    plot_monthly_revenue, plot_monthly_product_revenue,
+    plot_revenue_by_hour,
+)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────
@@ -249,6 +252,27 @@ class TestMonthlyRevenueVisualisation:
         assert 'MoM Growth %' not in trace_names
         assert fig.layout.title.text == 'Monthly Revenue & Order Volume'
         assert fig.layout.yaxis2.title.text == 'Orders'
+
+
+class TestMonthlyProductRevenue:
+    def test_limits_results_to_requested_top_products(self, cleaned_df):
+        result = get_monthly_product_revenue(cleaned_df, n=2)
+
+        assert not result.empty
+        assert result['Description'].nunique() == 2
+        assert {'YearMonth', 'Description', 'Revenue'} == set(result.columns)
+
+    def test_visualisation_uses_one_small_multiple_per_product(self, cleaned_df):
+        monthly_products = get_monthly_product_revenue(cleaned_df, n=3)
+        fig = plot_monthly_product_revenue(monthly_products)
+
+        product_count = monthly_products['Description'].nunique()
+        assert len(fig.data) == product_count
+        assert all(trace.type == 'scatter' for trace in fig.data)
+        assert all(trace.mode == 'lines+markers' for trace in fig.data)
+        assert all(trace.fill in (None, 'none') for trace in fig.data)
+        assert len(fig.layout.annotations) == product_count
+        assert fig.layout.title.text == 'Monthly Revenue Patterns by Product'
 
 
 class TestHourlyRevenueVisualisation:
