@@ -46,7 +46,7 @@ def _apply_base(fig: go.Figure, title: str) -> go.Figure:
 
 def plot_monthly_revenue(monthly_df: pd.DataFrame) -> go.Figure:
     """
-    Bar + line combo: monthly revenue bars with MoM growth % line overlay.
+    Bar + line combo: monthly revenue bars with order volume line overlay.
     Input: output of get_monthly_revenue().
     """
     if monthly_df.empty:
@@ -62,21 +62,21 @@ def plot_monthly_revenue(monthly_df: pd.DataFrame) -> go.Figure:
         opacity=0.85,
     ), secondary_y=False)
 
-    if 'Revenue_Growth_%' in monthly_df.columns:
+    if 'Orders' in monthly_df.columns:
         fig.add_trace(go.Scatter(
             x=monthly_df['YearMonth'],
-            y=monthly_df['Revenue_Growth_%'],
-            name='MoM Growth %',
+            y=monthly_df['Orders'],
+            name='Orders',
             mode='lines+markers',
             line=dict(color=COLORS['secondary'], width=2.5),
             marker=dict(size=6),
         ), secondary_y=True)
-        fig.update_yaxes(title_text='Growth %', secondary_y=True,
+        fig.update_yaxes(title_text='Orders', secondary_y=True,
                          showgrid=False, color=COLORS['secondary'])
 
     fig.update_yaxes(title_text='Revenue (£)', secondary_y=False)
     fig.update_xaxes(tickangle=-45)
-    return _apply_base(fig, 'Monthly Revenue & Month-over-Month Growth')
+    return _apply_base(fig, 'Monthly Revenue & Order Volume')
 
 
 def plot_revenue_by_day_of_week(dow_df: pd.DataFrame) -> go.Figure:

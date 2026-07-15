@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from src.data_cleaning import clean_data
 from src.analysis import get_kpi_summary, get_return_summary, get_monthly_revenue
 from src.recommendation_engine import compute_rfm, get_segment_summary, generate_recommendations
+from src.visualisations import plot_monthly_revenue
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────
@@ -233,3 +234,15 @@ class TestMonthlyRevenue:
         """Fixture data spans 3 months so we should get multiple rows."""
         result = get_monthly_revenue(cleaned_df)
         assert len(result) >= 2
+
+
+class TestMonthlyRevenueVisualisation:
+    def test_compares_revenue_with_order_volume(self, cleaned_df):
+        monthly = get_monthly_revenue(cleaned_df)
+        fig = plot_monthly_revenue(monthly)
+
+        trace_names = [trace.name for trace in fig.data]
+        assert 'Orders' in trace_names
+        assert 'MoM Growth %' not in trace_names
+        assert fig.layout.title.text == 'Monthly Revenue & Order Volume'
+        assert fig.layout.yaxis2.title.text == 'Orders'
