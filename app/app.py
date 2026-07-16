@@ -206,7 +206,6 @@ if st.session_state['df_clean'] is not None:
 
 with st.sidebar:
     st.markdown("## :material/analytics: Retail Analytics")
-    st.markdown("---")
 
     nav_options = [":material/home: Data & Upload"]
     if st.session_state['df_clean'] is not None:
