@@ -183,23 +183,71 @@ code {
 
 # SESSION STATE
 
-if 'df_clean' not in st.session_state:
-    st.session_state['df_clean'] = None
-if 'filename' not in st.session_state:
-    st.session_state['filename'] = None
-if 'sheet_names' not in st.session_state:
-    st.session_state['sheet_names'] = None
-if 'sheet_mode' not in st.session_state:
-    st.session_state['sheet_mode'] = None
-if 'selected_sheet' not in st.session_state:
-    st.session_state['selected_sheet'] = None
-if 'current_tab' not in st.session_state:
-    st.session_state['current_tab'] = ":material/home: Data & Upload"
+if "df_clean" not in st.session_state:
+    st.session_state["df_clean"] = None
 
-if st.session_state['df_clean'] is not None:
-    session_df = st.session_state['df_clean']
-    if 'CustomerID' in session_df.columns:
-        session_df['CustomerID'] = session_df['CustomerID'].fillna('Guest').astype(str)
+if "filename" not in st.session_state:
+    st.session_state["filename"] = None
+
+if "sheet_names" not in st.session_state:
+    st.session_state["sheet_names"] = None
+
+if "sheet_mode" not in st.session_state:
+    st.session_state["sheet_mode"] = None
+
+if "selected_sheet" not in st.session_state:
+    st.session_state["selected_sheet"] = None
+
+if "current_tab" not in st.session_state:
+    st.session_state["current_tab"] = (
+        ":material/home: Data & Upload"
+    )
+
+if "last_uploaded_file" not in st.session_state:
+    st.session_state["last_uploaded_file"] = None
+
+if "_raw_sheets" not in st.session_state:
+    st.session_state["_raw_sheets"] = None
+
+if "excel_file_bytes" not in st.session_state:
+    st.session_state["excel_file_bytes"] = None
+
+if "local_excel_path" not in st.session_state:
+    st.session_state["local_excel_path"] = None
+
+if "excel_source" not in st.session_state:
+    st.session_state["excel_source"] = None
+
+
+# Fix dataframe column types for Streamlit / Arrow
+if st.session_state["df_clean"] is not None:
+    session_df = st.session_state["df_clean"]
+
+    text_columns = [
+        "Invoice",
+        "StockCode",
+        "Description",
+        "CustomerID",
+        "Country",
+        "SourceSheet",
+    ]
+
+    for col in text_columns:
+        if col in session_df.columns:
+            session_df[col] = (
+                session_df[col]
+                .fillna("")
+                .astype(str)
+            )
+
+    if "CustomerID" in session_df.columns:
+        session_df["CustomerID"] = (
+            session_df["CustomerID"]
+            .replace("", "Guest")
+            .fillna("Guest")
+            .astype(str)
+        )
+
 
 
 # SIDEBAR
@@ -247,50 +295,210 @@ def is_already_cleaned(df: pd.DataFrame) -> bool:
     return 'Revenue' in df.columns and 'CustomerID' in df.columns and 'IsReturn' in df.columns
 
 
-def _process_single_df(df_raw: pd.DataFrame, source_label: str) -> pd.DataFrame | None:
+def _process_single_df(
+    df_raw: pd.DataFrame,
+    source_label: str
+) -> pd.DataFrame | None:
+
+    # Work on a copy
+    df_raw = df_raw.copy()
+
+    # Remove spaces around column names
+    df_raw.columns = (
+        df_raw.columns
+        .astype(str)
+        .str.strip()
+    )
+
+    # Columns that should always be text
+    text_columns = [
+        "Invoice",
+        "StockCode",
+        "Description",
+        "CustomerID",
+        "Customer ID",
+        "Country",
+        "SourceSheet",
+    ]
+
+    for col in text_columns:
+        if col in df_raw.columns:
+            df_raw[col] = (
+                df_raw[col]
+                .fillna("")
+                .astype(str)
+            )
+
+    # Convert date column safely
+    if "InvoiceDate" in df_raw.columns:
+        df_raw["InvoiceDate"] = pd.to_datetime(
+            df_raw["InvoiceDate"],
+            errors="coerce",
+        )
+
+    # Validate data
     is_valid, report = validate_data(df_raw)
-    with st.expander(f":material/list_alt: Validation report — {source_label}", expanded=not is_valid):
+
+    with st.expander(
+        f":material/list_alt: Validation report — {source_label}",
+        expanded=not is_valid,
+    ):
         _show_validation_report(report)
+
     if not is_valid:
-        st.error(":material/cancel: **Cannot proceed** — fix the errors above before analysis can run.")
+        st.error(
+            ":material/cancel: **Cannot proceed** — "
+            "fix the errors above before analysis can run."
+        )
         return None
+
+    # Dataset is already cleaned
     if is_already_cleaned(df_raw):
-        df_raw['CustomerID'] = df_raw['CustomerID'].fillna('Guest').astype(str)
+        df_raw["CustomerID"] = (
+            df_raw["CustomerID"]
+            .replace("", "Guest")
+            .fillna("Guest")
+            .astype(str)
+        )
+
+        df_raw["StockCode"] = (
+            df_raw["StockCode"]
+            .fillna("")
+            .astype(str)
+        )
+
         return df_raw
-    if 'Price' in df_raw.columns and 'UnitPrice' not in df_raw.columns:
-        df_raw = df_raw.rename(columns={'Price': 'UnitPrice'})
-    with st.spinner(f":material/mop: Cleaning data ({source_label})..."):
+
+    # Rename raw Price column
+    if (
+        "Price" in df_raw.columns
+        and "UnitPrice" not in df_raw.columns
+    ):
+        df_raw = df_raw.rename(
+            columns={"Price": "UnitPrice"}
+        )
+
+    # Clean raw dataset
+    with st.spinner(
+        f":material/mop: Cleaning data ({source_label})..."
+    ):
         df_clean = clean_data(df_raw)
+
+    # Fix types again after cleaning
+    final_text_columns = [
+        "Invoice",
+        "StockCode",
+        "Description",
+        "CustomerID",
+        "Country",
+        "SourceSheet",
+    ]
+
+    for col in final_text_columns:
+        if col in df_clean.columns:
+            df_clean[col] = (
+                df_clean[col]
+                .fillna("")
+                .astype(str)
+            )
+
+    if "CustomerID" in df_clean.columns:
+        df_clean["CustomerID"] = (
+            df_clean["CustomerID"]
+            .replace("", "Guest")
+            .fillna("Guest")
+            .astype(str)
+        )
+
     return df_clean
 
+def prepare_excel_sheets(
+    uploaded_file,
+    sheets: dict[str, pd.DataFrame],
+) -> pd.DataFrame | None:
+    """Store multiple Excel sheets or process a single sheet."""
+
+    if not sheets:
+        st.error(
+            ":material/cancel: The Excel file contains no readable sheets."
+        )
+        return None
+
+    sheet_names = list(sheets.keys())
+
+    st.session_state["sheet_names"] = sheet_names
+    st.session_state["_raw_sheets"] = sheets
+
+    # Multiple sheets: wait for the user to choose
+    if len(sheet_names) > 1:
+        return None
+
+    # One sheet: load it automatically
+    sheet_name = sheet_names[0]
+    df_raw = sheets[sheet_name].copy()
+
+    if "InvoiceDate" in df_raw.columns:
+        df_raw["InvoiceDate"] = pd.to_datetime(
+            df_raw["InvoiceDate"],
+            errors="coerce",
+        )
+
+    return _process_single_df(
+        df_raw,
+        f"{uploaded_file.name} → {sheet_name}",
+    )
 
 def load_and_clean(uploaded_file) -> pd.DataFrame | None:
+    """Load CSV directly or prepare Excel sheet selection."""
+
     filename = uploaded_file.name.lower()
-    if filename.endswith('.csv'):
-        try:
-            df_raw = pd.read_csv(uploaded_file, parse_dates=['InvoiceDate'])
-        except Exception as e:
-            st.error(f":material/cancel: Could not read CSV: {e}")
-            return None
-        return _process_single_df(df_raw, uploaded_file.name)
+    uploaded_file.seek(0)
 
-    if filename.endswith('.xlsx') or filename.endswith('.xls'):
+    # CSV
+    if filename.endswith(".csv"):
         try:
-            sheets: dict = pd.read_excel(uploaded_file, sheet_name=None)
+            df_raw = pd.read_csv(uploaded_file)
         except Exception as e:
-            st.error(f":material/cancel: Could not read Excel file: {e}")
+            st.error(f"Could not read CSV file: {e}")
             return None
-        sheet_names = list(sheets.keys())
-        st.session_state['sheet_names'] = sheet_names
-        if len(sheet_names) >= 3:
-            st.session_state['_raw_sheets'] = sheets
+
+        return _process_single_df(
+            df_raw,
+            uploaded_file.name,
+        )
+
+    # XLSX
+    if filename.endswith(".xlsx"):
+        try:
+            uploaded_file.seek(0)
+
+            excel_file = pd.ExcelFile(
+                uploaded_file,
+                engine="openpyxl",
+            )
+
+            st.session_state["sheet_names"] = excel_file.sheet_names
+
+            # Store file bytes so sheets can be read later
+            uploaded_file.seek(0)
+            st.session_state["excel_file_bytes"] = uploaded_file.getvalue()
+
             return None
-        df_raw = sheets[sheet_names[0]]
-        return _process_single_df(df_raw, f"{uploaded_file.name} → {sheet_names[0]}")
-    st.error(f":material/cancel: Unsupported file type: `{uploaded_file.name}`")
+
+        except Exception as e:
+            st.error(f"Could not read XLSX file: {e}")
+            return None
+
+    # XLS
+    if filename.endswith(".xls"):
+        st.error(
+            "Old `.xls` files need the `xlrd` package. "
+            "Convert the file to `.xlsx` or install `xlrd`."
+        )
+        return None
+
+    st.error(f"Unsupported file type: {uploaded_file.name}")
     return None
-
-
 # PAGE: DATA & UPLOAD
 
 if page == ":material/home: Data & Upload":
@@ -303,84 +511,275 @@ if page == ":material/home: Data & Upload":
     col1, col2 = st.columns([2, 1])
     with col1:
         st.markdown("### Upload Monthly Sales Data")
+
+        from pathlib import Path
+        from io import BytesIO
+
+        PROJECT_ROOT = Path(__file__).resolve().parent.parent
+        DATA_DIR = PROJECT_ROOT / "data" / "Testing Datasets"
+
+        # ---------------------------------------------------------
+        # 1. Browser upload
+        # ---------------------------------------------------------
         uploaded = st.file_uploader(
-            "Drop your CSV or Excel file here (Online Retail II format)",
+            "Drop your CSV or Excel file here",
             type=["csv", "xlsx", "xls"],
             key="uploader",
         )
 
         if uploaded:
-            df = load_and_clean(uploaded)
-            if df is None and st.session_state.get('sheet_names') and len(st.session_state['sheet_names']) >= 3:
-                sheet_names = st.session_state['sheet_names']
-                st.markdown("---")
-                st.markdown(f"### :material/table_chart: Excel file has **{len(sheet_names)} sheets** — choose how to analyse")
+            file_identity = f"{uploaded.name}-{uploaded.size}"
 
-                sheet_mode = st.radio(
-                    "Analysis mode",
-                    options=["Analyse a single sheet", "Combine all sheets together"],
-                    key="sheet_mode_radio",
-                    horizontal=True,
-                )
+            if st.session_state.get("last_uploaded_file") != file_identity:
+                st.session_state["last_uploaded_file"] = file_identity
+                st.session_state["sheet_names"] = None
+                st.session_state["excel_file_bytes"] = None
+                st.session_state["local_excel_path"] = None
+                st.session_state["excel_source"] = None
+                st.session_state["sheet_mode"] = None
+                st.session_state["selected_sheet"] = None
 
-                if sheet_mode == "Analyse a single sheet":
-                    selected_sheet = st.selectbox(
-                        "Select sheet to analyse",
-                        options=sheet_names,
-                        key="sheet_selector",
+                df = load_and_clean(uploaded)
+
+                # CSV loads directly
+                if df is not None:
+                    st.session_state["df_clean"] = df
+                    st.session_state["filename"] = uploaded.name
+                    st.session_state["current_tab"] = (
+                        ":material/analytics: Analytics Dashboard"
                     )
-                    if st.button("Load Selected Sheet", key="btn_load_sheet", use_container_width=True):
-                        raw_sheets = st.session_state.get('_raw_sheets', {})
-                        df_raw = raw_sheets.get(selected_sheet)
-                        if df_raw is not None:
-                            result = _process_single_df(df_raw, f"{uploaded.name} → {selected_sheet}")
-                            if result is not None:
-                                st.session_state['df_clean'] = result
-                                st.session_state['filename'] = f"{uploaded.name} → {selected_sheet}"
-                                st.session_state['sheet_mode'] = 'single'
-                                st.session_state['selected_sheet'] = selected_sheet
-                                # Redirect automatically
-                                st.session_state['current_tab'] = ":material/analytics: Analytics Dashboard"
-                                st.success(f":material/check_circle: **{selected_sheet}** loaded successfully. Redirecting...")
-                                st.rerun()
+                    st.rerun()
 
-                else:
-                    if st.button("Combine and Load All Sheets", key="btn_load_all", use_container_width=True):
-                        raw_sheets = st.session_state.get('_raw_sheets', {})
-                        combined_frames = []
-                        all_ok = True
-                        for sname, sdf in raw_sheets.items():
-                            is_valid, report = validate_data(sdf)
-                            if not is_valid:
-                                st.error(f":material/cancel: Sheet **{sname}** failed validation:")
+                # XLSX stores sheet names and bytes
+                if uploaded.name.lower().endswith(".xlsx"):
+                    st.session_state["excel_source"] = "uploaded"
+
+        st.markdown("---")
+
+        # ---------------------------------------------------------
+        # 2. Local Excel file
+        # ---------------------------------------------------------
+        st.markdown("### Load Excel File From Project")
+
+        local_excel_files = sorted(DATA_DIR.glob("*.xlsx"))
+
+        if local_excel_files:
+            selected_local_file = st.selectbox(
+                "Choose local Excel file",
+                options=local_excel_files,
+                format_func=lambda path: path.name,
+                key="local_excel_selector",
+            )
+
+            if st.button(
+                "Open Local Excel File",
+                key="btn_open_local_excel",
+                use_container_width=True,
+            ):
+                try:
+                    excel_file = pd.ExcelFile(
+                        selected_local_file,
+                        engine="openpyxl",
+                    )
+
+                    st.session_state["local_excel_path"] = str(
+                        selected_local_file
+                    )
+                    st.session_state["sheet_names"] = excel_file.sheet_names
+                    st.session_state["excel_source"] = "local"
+                    st.session_state["excel_file_bytes"] = None
+                    st.session_state["last_uploaded_file"] = None
+                    st.session_state["sheet_mode"] = None
+                    st.session_state["selected_sheet"] = None
+
+                    st.success(
+                        f"Opened **{selected_local_file.name}** successfully."
+                    )
+
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(
+                        f"Could not open local Excel file: {e}"
+                    )
+        else:
+            st.info(
+                f"No `.xlsx` files found inside `{DATA_DIR}`."
+            )
+
+        # ---------------------------------------------------------
+        # 3. Excel sheet selector
+        # Works for BOTH uploaded and local files
+        # ---------------------------------------------------------
+        if st.session_state.get("sheet_names"):
+            sheet_names = st.session_state["sheet_names"]
+            excel_source = st.session_state.get("excel_source")
+
+            if excel_source == "local":
+                source_name = Path(
+                    st.session_state["local_excel_path"]
+                ).name
+            else:
+                source_name = uploaded.name if uploaded else "Uploaded Excel file"
+
+            st.markdown("---")
+            st.markdown(
+                f"### `{source_name}` contains "
+                f"**{len(sheet_names)} sheet(s)**"
+            )
+
+            sheet_mode = st.radio(
+                "Choose how to load the Excel file",
+                options=[
+                    "Load selected sheets",
+                    "Load all sheets",
+                ],
+                horizontal=True,
+                key="sheet_mode_radio",
+            )
+
+            if sheet_mode == "Load selected sheets":
+                selected_sheets = st.multiselect(
+                    "Select sheets",
+                    options=sheet_names,
+                    default=[sheet_names[0]],
+                    key="sheet_selector",
+                )
+            else:
+                selected_sheets = sheet_names
+
+            if st.button(
+                "Load Excel Data",
+                key="btn_load_excel_data",
+                type="primary",
+                use_container_width=True,
+                disabled=not selected_sheets,
+            ):
+                combined_frames = []
+                all_ok = True
+
+                with st.spinner("Reading Excel sheets..."):
+                    for sheet_name in selected_sheets:
+                        try:
+                            # Read from local project file
+                            if excel_source == "local":
+                                sheet_df = pd.read_excel(
+                                    st.session_state["local_excel_path"],
+                                    sheet_name=sheet_name,
+                                    engine="openpyxl",
+                                )
+
+                            # Read from browser-uploaded file bytes
+                            else:
+                                excel_bytes = st.session_state.get(
+                                    "excel_file_bytes"
+                                )
+
+                                if not excel_bytes:
+                                    st.error(
+                                        "Uploaded Excel data is no longer available."
+                                    )
+                                    all_ok = False
+                                    break
+
+                                sheet_df = pd.read_excel(
+                                    BytesIO(excel_bytes),
+                                    sheet_name=sheet_name,
+                                    engine="openpyxl",
+                                )
+
+                            sheet_df = sheet_df.copy()
+
+                            # Remove spaces around column names
+                            sheet_df.columns = (
+                                sheet_df.columns
+                                .astype(str)
+                                .str.strip()
+                            )
+
+                            is_valid, report = validate_data(
+                                sheet_df
+                            )
+
+                            with st.expander(
+                                f"Validation report — {sheet_name}",
+                                expanded=not is_valid,
+                            ):
                                 _show_validation_report(report)
+
+                            if not is_valid:
+                                st.error(
+                                    f"Sheet **{sheet_name}** "
+                                    "failed validation."
+                                )
                                 all_ok = False
                                 break
-                            if 'Price' in sdf.columns and 'UnitPrice' not in sdf.columns:
-                                sdf = sdf.rename(columns={'Price': 'UnitPrice'})
-                            combined_frames.append(sdf)
 
-                        if all_ok and combined_frames:
-                            combined_raw = pd.concat(combined_frames, ignore_index=True)
-                            with st.spinner(":material/mop: Cleaning combined dataset..."):
-                                result = clean_data(combined_raw)
-                            st.session_state['df_clean'] = result
-                            st.session_state['filename'] = f"{uploaded.name} (all {len(sheet_names)} sheets)"
-                            st.session_state['sheet_mode'] = 'all'
-                            # Redirect automatically
-                            st.session_state['current_tab'] = ":material/analytics: Analytics Dashboard"
-                            st.success(f":material/check_circle: All **{len(sheet_names)}** sheets combined. Redirecting...")
-                            st.rerun()
+                            if (
+                                "Price" in sheet_df.columns
+                                and "UnitPrice" not in sheet_df.columns
+                            ):
+                                sheet_df = sheet_df.rename(
+                                    columns={
+                                        "Price": "UnitPrice"
+                                    }
+                                )
 
-            elif df is not None:
-                st.session_state['df_clean'] = df
-                st.session_state['filename'] = uploaded.name
-                st.session_state['sheet_names'] = None
-                st.session_state['sheet_mode'] = None
-                # Redirect automatically
-                st.session_state['current_tab'] = ":material/analytics: Analytics Dashboard"
-                st.rerun()
+                            sheet_df["SourceSheet"] = sheet_name
+                            combined_frames.append(sheet_df)
 
+                        except Exception as e:
+                            st.error(
+                                f"Could not read sheet "
+                                f"**{sheet_name}**: {e}"
+                            )
+                            all_ok = False
+                            break
+
+                if all_ok and combined_frames:
+                    combined_raw = pd.concat(
+                        combined_frames,
+                        ignore_index=True,
+                    )
+
+                    if is_already_cleaned(combined_raw):
+                        result = combined_raw.copy()
+
+                        result["CustomerID"] = (
+                            result["CustomerID"]
+                            .fillna("Guest")
+                            .astype(str)
+                        )
+                    else:
+                        with st.spinner(
+                            "Cleaning Excel data..."
+                        ):
+                            result = clean_data(combined_raw)
+
+                    st.session_state["df_clean"] = result
+
+                    if len(selected_sheets) == len(sheet_names):
+                        st.session_state["filename"] = (
+                            f"{source_name} "
+                            f"(all {len(sheet_names)} sheets)"
+                        )
+                        st.session_state["sheet_mode"] = "all"
+                    else:
+                        st.session_state["filename"] = (
+                            f"{source_name} → "
+                            f"{', '.join(selected_sheets)}"
+                        )
+                        st.session_state["sheet_mode"] = "selected"
+
+                    st.session_state["selected_sheet"] = (
+                        selected_sheets
+                    )
+                    st.session_state["current_tab"] = (
+                        ":material/analytics: Analytics Dashboard"
+                    )
+
+                    st.rerun()
+    
     if st.session_state['df_clean'] is not None:
         st.markdown("---")
         st.markdown(f"### :material/folder: Currently loaded: `{st.session_state['filename']}`")
