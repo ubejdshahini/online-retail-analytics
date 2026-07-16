@@ -9,7 +9,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.data_cleaning import clean_data
 from src.analysis import (
-    get_kpi_summary, get_monthly_revenue, get_revenue_by_hour,
+    get_kpi_summary, get_monthly_revenue, get_monthly_product_revenue,
+    get_revenue_by_hour,
     get_revenue_by_day_of_week, get_top_products, get_worst_products,
     get_product_return_rate, get_country_performance,
     get_customer_lifetime_value, get_new_vs_returning_customers,
@@ -18,7 +19,8 @@ from src.analysis import (
 from src.recommendation_engine import compute_rfm, get_segment_summary, generate_recommendations
 from src.export_utils import generate_excel_report
 from src.visualisations import (
-    plot_monthly_revenue, plot_revenue_by_hour, plot_revenue_by_day_of_week,
+    plot_monthly_revenue, plot_monthly_product_revenue,
+    plot_revenue_by_hour, plot_revenue_by_day_of_week,
     plot_top_products, plot_product_return_rates,
     plot_rfm_segments, plot_segment_revenue_share, plot_clv_distribution,
     plot_new_vs_returning, plot_country_revenue, plot_top_countries_bar,
@@ -283,22 +285,22 @@ if page == ":material/home: Data & Upload":
             type=["csv"],
             key="uploader",
         )
+        
+        #st.markdown("— **OR** —")
 
-        st.markdown("— **OR** —")
-
-        if st.button("Load local default dataset (`data/cleaned_retail_data.csv`)"):
-            import os
-            default_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'cleaned_retail_data.csv')
-            if os.path.exists(default_path):
-                with st.spinner("Loading local file..."):
-                    df = pd.read_csv(default_path, parse_dates=['InvoiceDate'])
-                    if 'CustomerID' in df.columns:
-                        df['CustomerID'] = df['CustomerID'].fillna('Guest').astype(str)
-                    st.session_state['df_clean'] = df
-                    st.session_state['filename'] = 'cleaned_retail_data.csv'
-                st.success(":material/check_circle: Local default dataset loaded successfully!")
-            else:
-                st.error(":material/cancel: `cleaned_retail_data.csv` not found in `data/`. Please run `01_data_exploration.ipynb` first.")
+        #if st.button("Load local default dataset (`data/cleaned_retail_data.csv`)"):
+        #    import os
+        #    default_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'cleaned_retail_data.csv')
+        #    if os.path.exists(default_path):
+        #        with st.spinner("Loading local file..."):
+        #            df = pd.read_csv(default_path, parse_dates=['InvoiceDate'])
+        #            if 'CustomerID' in df.columns:
+        #                df['CustomerID'] = df['CustomerID'].fillna('Guest').astype(str)
+        #            st.session_state['df_clean'] = df
+        #            st.session_state['filename'] = 'cleaned_retail_data.csv'
+        #        st.success(":material/check_circle: Local default dataset loaded successfully!")
+        #    else:
+        #        st.error(":material/cancel: `cleaned_retail_data.csv` not found in `data/`. Please run `01_data_exploration.ipynb` first.")
 
         if uploaded:
             df = load_and_clean(uploaded)
@@ -310,20 +312,7 @@ if page == ":material/home: Data & Upload":
                     f"**{len(df):,}** rows after cleaning."
                 )
 
-    with col2:
-        st.markdown("### Expected Format")
-        st.markdown("""
-| Column | Type |
-|--------|------|
-| `Invoice` | string |
-| `StockCode` | string |
-| `Description` | string |
-| `Quantity` | integer |
-| `InvoiceDate` | datetime |
-| `Price` | float |
-| `Customer ID` | float/str |
-| `Country` | string |
-        """)
+   
 
     # Show currently loaded file
     if st.session_state['df_clean'] is not None:
@@ -370,6 +359,19 @@ elif page == ":material/analytics: Analytics Dashboard":
     with tab1:
         monthly = get_monthly_revenue(df)
         st.plotly_chart(plot_monthly_revenue(monthly), width='stretch')
+
+        product_count = st.slider(
+            "Products to compare by month",
+            min_value=3,
+            max_value=10,
+            value=4,
+            key="monthly_product_count",
+        )
+        monthly_products = get_monthly_product_revenue(df, n=product_count)
+        st.plotly_chart(
+            plot_monthly_product_revenue(monthly_products),
+            width='stretch',
+        )
 
         c1, c2 = st.columns(2)
         with c1:

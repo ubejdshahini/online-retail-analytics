@@ -24,6 +24,7 @@ COLORS = {
 }
 
 PALETTE = list(CHART_COLORS)
+SEGMENT_PALETTE = PALETTE + ['#06B6D4', '#F97316']
 
 BASE_LAYOUT = dict(
     paper_bgcolor=COLORS['background'],
@@ -46,7 +47,7 @@ def _apply_base(fig: go.Figure, title: str) -> go.Figure:
 
 def plot_monthly_revenue(monthly_df: pd.DataFrame) -> go.Figure:
     """
-    Bar + line combo: monthly revenue bars with MoM growth % line overlay.
+    Bar + line combo: monthly revenue bars with order volume line overlay.
     Input: output of get_monthly_revenue().
     """
     if monthly_df.empty:
@@ -62,21 +63,118 @@ def plot_monthly_revenue(monthly_df: pd.DataFrame) -> go.Figure:
         opacity=0.85,
     ), secondary_y=False)
 
-    if 'Revenue_Growth_%' in monthly_df.columns:
+    if 'Orders' in monthly_df.columns:
         fig.add_trace(go.Scatter(
             x=monthly_df['YearMonth'],
-            y=monthly_df['Revenue_Growth_%'],
-            name='MoM Growth %',
+            y=monthly_df['Orders'],
+            name='Orders',
             mode='lines+markers',
             line=dict(color=COLORS['secondary'], width=2.5),
             marker=dict(size=6),
         ), secondary_y=True)
-        fig.update_yaxes(title_text='Growth %', secondary_y=True,
+        fig.update_yaxes(title_text='Orders', secondary_y=True,
                          showgrid=False, color=COLORS['secondary'])
 
     fig.update_yaxes(title_text='Revenue (£)', secondary_y=False)
     fig.update_xaxes(tickangle=-45)
-    return _apply_base(fig, 'Monthly Revenue & Month-over-Month Growth')
+    return _apply_base(fig, 'Monthly Revenue & Order Volume')
+
+
+def plot_monthly_product_revenue(product_monthly_df: pd.DataFrame) -> go.Figure:
+    """Small-multiple monthly revenue trends for the dataset's top products."""
+    if product_monthly_df.empty:
+        return go.Figure()
+
+    products = product_monthly_df['Description'].drop_duplicates().tolist()
+    column_count = 2
+    row_count = int(np.ceil(len(products) / column_count))
+    subplot_titles = []
+    for product in products:
+        product_total = product_monthly_df.loc[
+            product_monthly_df['Description'] == product, 'Revenue'
+        ].sum()
+        display_name = product if len(product) <= 34 else f'{product[:31]}...'
+        subplot_titles.append(
+            f'<b>{display_name}</b>  ·  Total £{product_total:,.0f}'
+        )
+
+    fig = make_subplots(
+        rows=row_count,
+        cols=column_count,
+        subplot_titles=subplot_titles,
+        horizontal_spacing=0.10,
+        vertical_spacing=min(0.14, 0.32 / row_count),
+    )
+
+    for index, product in enumerate(products):
+        row = index // column_count + 1
+        column = index % column_count + 1
+        color = PALETTE[index % len(PALETTE)]
+        product_data = product_monthly_df[
+            product_monthly_df['Description'] == product
+        ]
+        peak_revenue = product_data['Revenue'].max()
+        marker_colors = [
+            COLORS['secondary'] if value == peak_revenue else color
+            for value in product_data['Revenue']
+        ]
+        marker_sizes = [
+            10 if value == peak_revenue else 4
+            for value in product_data['Revenue']
+        ]
+
+        fig.add_trace(go.Scatter(
+            x=product_data['YearMonth'],
+            y=product_data['Revenue'],
+            name=product,
+            mode='lines+markers',
+            line=dict(color=color, width=3, shape='spline', smoothing=0.35),
+            marker=dict(
+                color=marker_colors,
+                size=marker_sizes,
+                line=dict(color=COLORS['surface'], width=1),
+            ),
+            hovertemplate=(
+                f'<b>{product}</b><br>'
+                'Month: %{x}<br>'
+                'Revenue: £%{y:,.0f}<extra></extra>'
+            ),
+            showlegend=False,
+        ), row=row, col=column)
+
+    fig = _apply_base(fig, 'Monthly Revenue Patterns by Product')
+    fig.update_layout(
+        height=max(560, row_count * 245 + 100),
+        showlegend=False,
+        margin=dict(l=70, r=40, t=95, b=70),
+    )
+    fig.update_annotations(font=dict(size=13, color=COLORS['text']))
+    fig.update_xaxes(tickangle=-35, showgrid=False)
+    fig.update_yaxes(
+        tickprefix='£',
+        tickformat='~s',
+        rangemode='tozero',
+        gridcolor=COLORS['border'],
+    )
+
+    # Show month labels only on the lowest populated chart in each column.
+    last_row_by_column = {
+        1: row_count,
+        2: row_count if len(products) % 2 == 0 else max(1, row_count - 1),
+    }
+    for index in range(len(products)):
+        row = index // column_count + 1
+        column = index % column_count + 1
+        fig.update_xaxes(
+            showticklabels=row == last_row_by_column[column],
+            row=row,
+            col=column,
+        )
+
+    if len(products) % 2:
+        fig.update_xaxes(visible=False, row=row_count, col=2)
+        fig.update_yaxes(visible=False, row=row_count, col=2)
+    return fig
 
 
 def plot_revenue_by_day_of_week(dow_df: pd.DataFrame) -> go.Figure:
@@ -103,15 +201,14 @@ def plot_revenue_by_hour(hourly_df: pd.DataFrame) -> go.Figure:
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_trace(go.Scatter(
         x=hourly_df['Hour'], y=hourly_df['Revenue'],
-        name='Revenue (£)', fill='tozeroy',
+        name='Revenue (£)', mode='lines+markers',
         line=dict(color=COLORS['primary'], width=2),
-        fillcolor=COLORS['primary'],
-        opacity=0.25,
+        marker=dict(size=5),
     ), secondary_y=False)
     fig.add_trace(go.Scatter(
         x=hourly_df['Hour'], y=hourly_df['Transactions'],
         name='Transactions', mode='lines+markers',
-        line=dict(color=COLORS['secondary'], width=2, dash='dot'),
+        line=dict(color=COLORS['secondary'], width=2),
         marker=dict(size=5),
     ), secondary_y=True)
     fig.update_xaxes(title_text='Hour of Day', dtick=1)
@@ -218,26 +315,72 @@ def plot_rfm_segments(seg_summary: pd.DataFrame) -> go.Figure:
     if seg_summary.empty:
         return go.Figure()
 
+    label_positions = {
+        'Champions': 'top center',
+        'High Spenders': 'bottom center',
+        'At Risk': 'top center',
+        'Potential Loyalists': 'top right',
+        'Needs Attention': 'bottom center',
+        'Lost': 'top center',
+        'Recent Customers': 'middle left',
+        'Loyal Customers': 'middle right',
+    }
+    max_customers = max(float(seg_summary['Customers'].max()), 1)
+
     fig = go.Figure()
-    for i, row in seg_summary.iterrows():
+    for index, (_, row) in enumerate(seg_summary.iterrows()):
+        # Plotly treats scalar marker sizes as pixels, so calculate a bounded
+        # diameter directly. Square-root scaling preserves area proportionality
+        # without allowing a large segment to cover the chart.
+        bubble_size = 16 + np.sqrt(row['Customers'] / max_customers) * 44
         fig.add_trace(go.Scatter(
             x=[row['Avg_Recency_Days']],
             y=[row['Avg_Revenue']],
             mode='markers+text',
             name=row['Segment'],
             text=[row['Segment']],
-            textposition='top center',
+            textposition=label_positions.get(row['Segment'], 'top center'),
+            textfont=dict(size=11, color=COLORS['text']),
+            cliponaxis=False,
             marker=dict(
-                size=max(row['Customers'] / seg_summary['Customers'].max() * 80, 12),
-                color=PALETTE[i % len(PALETTE)],
+                size=bubble_size,
+                color=SEGMENT_PALETTE[index % len(SEGMENT_PALETTE)],
                 opacity=0.85,
-                line=dict(width=1, color=COLORS['background']),
+                line=dict(width=1.5, color=COLORS['background']),
+            ),
+            customdata=[[
+                row['Customers'],
+                row['Avg_Frequency'],
+                row['Total_Revenue'],
+            ]],
+            hovertemplate=(
+                '<b>%{text}</b><br>'
+                'Customers: %{customdata[0]:,.0f}<br>'
+                'Avg recency: %{x:,.0f} days<br>'
+                'Avg frequency: %{customdata[1]:,.1f} orders<br>'
+                'Avg revenue: £%{y:,.0f}<br>'
+                'Total revenue: £%{customdata[2]:,.0f}<extra></extra>'
             ),
         ))
-    fig.update_xaxes(title_text='Avg Days Since Last Purchase (Recency ↑ = worse)')
-    fig.update_yaxes(title_text='Avg Revenue per Customer (£)')
-    fig.update_layout(showlegend=False)
-    return _apply_base(fig, 'Customer Segments — Recency vs Revenue\n(bubble size = # customers)')
+    fig = _apply_base(
+        fig,
+        'Customer Segments — Recency vs Revenue (bubble size = customers)',
+    )
+    fig.update_xaxes(
+        title_text='Avg Days Since Last Purchase (Recency ↑ = worse)',
+        automargin=True,
+    )
+    fig.update_yaxes(
+        title_text='Avg Revenue per Customer (£)',
+        automargin=True,
+        rangemode='tozero',
+    )
+    fig.update_layout(
+        showlegend=False,
+        height=500,
+        margin=dict(l=75, r=65, t=80, b=75),
+    )
+    return fig
 
 
 def plot_segment_revenue_share(seg_summary: pd.DataFrame) -> go.Figure:
@@ -245,22 +388,60 @@ def plot_segment_revenue_share(seg_summary: pd.DataFrame) -> go.Figure:
     if seg_summary.empty:
         return go.Figure()
 
+    total_revenue = seg_summary['Total_Revenue'].sum()
+    revenue_shares = (
+        seg_summary['Total_Revenue'] / total_revenue * 100
+        if total_revenue else pd.Series(0, index=seg_summary.index)
+    )
+    inside_labels = [
+        f'<b>{segment}</b><br>{share:.1f}%'
+        if share >= 5 else ''
+        for segment, share in zip(seg_summary['Segment'], revenue_shares)
+    ]
+    segment_colors = [
+        SEGMENT_PALETTE[index % len(SEGMENT_PALETTE)]
+        for index in range(len(seg_summary))
+    ]
+
     fig = go.Figure(go.Pie(
         labels=seg_summary['Segment'],
         values=seg_summary['Total_Revenue'],
-        hole=0.55,
-        marker=dict(colors=PALETTE[:len(seg_summary)],
+        hole=0.60,
+        domain=dict(x=[0.00, 0.68], y=[0.04, 0.96]),
+        marker=dict(colors=segment_colors,
                     line=dict(color=COLORS['background'], width=2)),
-        textinfo='label+percent',
-        hovertemplate='%{label}<br>Revenue: £%{value:,.0f}<extra></extra>',
+        text=inside_labels,
+        textinfo='text',
+        textposition='inside',
+        sort=False,
+        hovertemplate=(
+            '<b>%{label}</b><br>'
+            'Revenue: £%{value:,.0f}<br>'
+            'Share: %{percent}<extra></extra>'
+        ),
     ))
+    fig = _apply_base(fig, 'Revenue Share by Customer Segment')
     fig.update_layout(
-        annotations=[dict(text='Revenue<br>Share', x=0.5, y=0.5,
-                          font_size=14, showarrow=False,
-                          font_color=COLORS['text'])],
-        showlegend=False,
+        annotations=[dict(text='Revenue<br>Share', x=0.34, y=0.5,
+                           font_size=14, showarrow=False,
+                           font_color=COLORS['text'])],
+        showlegend=True,
+        height=500,
+        uniformtext_minsize=11,
+        uniformtext_mode='hide',
+        legend=dict(
+            title=dict(text='Customer segments', font=dict(size=12)),
+            orientation='v',
+            yanchor='middle',
+            y=0.5,
+            xanchor='left',
+            x=0.73,
+            font=dict(size=11),
+            itemsizing='constant',
+        ),
+        margin=dict(l=20, r=20, t=75, b=35),
     )
-    return _apply_base(fig, 'Revenue Share by Customer Segment')
+    return fig
 
 
 def plot_clv_distribution(clv_df: pd.DataFrame) -> go.Figure:

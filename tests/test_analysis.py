@@ -12,8 +12,15 @@ import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.data_cleaning import clean_data
-from src.analysis import get_kpi_summary, get_return_summary, get_monthly_revenue
+from src.analysis import (
+    get_kpi_summary, get_return_summary, get_monthly_revenue,
+    get_monthly_product_revenue, get_revenue_by_hour,
+)
 from src.recommendation_engine import compute_rfm, get_segment_summary, generate_recommendations
+from src.visualisations import (
+    plot_monthly_revenue, plot_monthly_product_revenue,
+    plot_revenue_by_hour, plot_rfm_segments, plot_segment_revenue_share,
+)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────
@@ -233,3 +240,81 @@ class TestMonthlyRevenue:
         """Fixture data spans 3 months so we should get multiple rows."""
         result = get_monthly_revenue(cleaned_df)
         assert len(result) >= 2
+
+
+class TestMonthlyRevenueVisualisation:
+    def test_compares_revenue_with_order_volume(self, cleaned_df):
+        monthly = get_monthly_revenue(cleaned_df)
+        fig = plot_monthly_revenue(monthly)
+
+        trace_names = [trace.name for trace in fig.data]
+        assert 'Orders' in trace_names
+        assert 'MoM Growth %' not in trace_names
+        assert fig.layout.title.text == 'Monthly Revenue & Order Volume'
+        assert fig.layout.yaxis2.title.text == 'Orders'
+
+
+class TestMonthlyProductRevenue:
+    def test_limits_results_to_requested_top_products(self, cleaned_df):
+        result = get_monthly_product_revenue(cleaned_df, n=2)
+
+        assert not result.empty
+        assert result['Description'].nunique() == 2
+        assert {'YearMonth', 'Description', 'Revenue'} == set(result.columns)
+
+    def test_visualisation_uses_one_small_multiple_per_product(self, cleaned_df):
+        monthly_products = get_monthly_product_revenue(cleaned_df, n=3)
+        fig = plot_monthly_product_revenue(monthly_products)
+
+        product_count = monthly_products['Description'].nunique()
+        assert len(fig.data) == product_count
+        assert all(trace.type == 'scatter' for trace in fig.data)
+        assert all(trace.mode == 'lines+markers' for trace in fig.data)
+        assert all(trace.fill in (None, 'none') for trace in fig.data)
+        assert len(fig.layout.annotations) == product_count
+        assert fig.layout.title.text == 'Monthly Revenue Patterns by Product'
+
+
+class TestHourlyRevenueVisualisation:
+    def test_uses_two_lines_without_area_fill(self, cleaned_df):
+        hourly = get_revenue_by_hour(cleaned_df)
+        fig = plot_revenue_by_hour(hourly)
+
+        assert len(fig.data) == 2
+        assert all(trace.fill in (None, 'none') for trace in fig.data)
+        assert all(trace.mode == 'lines+markers' for trace in fig.data)
+
+
+class TestCustomerSegmentVisualisations:
+    def test_bubble_labels_use_distinct_positions_and_are_not_clipped(self):
+        summary = pd.DataFrame({
+            'Segment': ['Champions', 'High Spenders', 'Recent Customers', 'Loyal Customers'],
+            'Customers': [100, 60, 40, 35],
+            'Avg_Recency_Days': [30, 45, 20, 22],
+            'Avg_Frequency': [12, 5, 2, 8],
+            'Avg_Revenue': [500, 420, 80, 90],
+            'Total_Revenue': [50000, 25200, 3200, 3150],
+        })
+
+        fig = plot_rfm_segments(summary)
+
+        positions = {trace.name: trace.textposition for trace in fig.data}
+        assert positions['Recent Customers'] != positions['Loyal Customers']
+        assert all(trace.cliponaxis is False for trace in fig.data)
+        assert all(16 <= trace.marker.size <= 60 for trace in fig.data)
+        assert fig.layout.margin.r >= 60
+
+    def test_donut_uses_inside_labels_and_complete_legend(self):
+        summary = pd.DataFrame({
+            'Segment': ['Champions', 'At Risk', 'Lost'],
+            'Total_Revenue': [80000, 19000, 1000],
+        })
+
+        fig = plot_segment_revenue_share(summary)
+        pie = fig.data[0]
+
+        assert pie.textposition == 'inside'
+        assert pie.text[-1] == ''
+        assert len(pie.marker.colors) == len(summary)
+        assert fig.layout.showlegend is True
+        assert fig.layout.legend.orientation == 'v'
