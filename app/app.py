@@ -942,7 +942,7 @@ elif page == ":material/analytics: Analytics Dashboard":
                     st.warning("No product sales data found.")
                 else:
                     top = get_top_products(df_t2_top, n=top_n)
-                    st.plotly_chart(plot_top_products(top, n=top_n), use_container_width=True)
+                    st.plotly_chart(plot_top_products(top, n=top_n), use_container_width=True, key="chart_top_products")
 
         with c2:
             with st.container(border=True):
@@ -966,7 +966,7 @@ elif page == ":material/analytics: Analytics Dashboard":
                     st.warning("No product sales data found.")
                 else:
                     worst = get_worst_products(df_t2_worst, n=10)
-                    st.plotly_chart(plot_top_products(worst, n=10), use_container_width=True)
+                    st.plotly_chart(plot_top_products(worst, n=10), use_container_width=True, key="chart_worst_products")
                     st.caption("Worst-selling products — consider repricing or discontinuation")
 
     with tab3:
