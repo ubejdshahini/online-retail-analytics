@@ -191,6 +191,58 @@ class TestRFM:
             assert 'Segment' in summary.columns
             assert 'Customers' in summary.columns
 
+    def test_rfm_identical_recency_does_not_crash(self):
+        """
+        Regression: compute_rfm must NOT raise ValueError when all customers
+        share the same InvoiceDate (non-unique bin edges in pd.qcut).
+        Previously crashed with: ValueError: Bin edges must be unique.
+        """
+        df = pd.DataFrame({
+            'Invoice':     ['INV1', 'INV2', 'INV3', 'INV4', 'INV5'],
+            'CustomerID':  ['C1',   'C2',   'C3',   'C4',   'C5'],
+            'InvoiceDate': pd.to_datetime(['2024-06-01'] * 5),  # all identical
+            'Revenue':     [100.0, 200.0, 150.0, 80.0, 300.0],
+        })
+        rfm = compute_rfm(df)   # must not raise
+        assert isinstance(rfm, pd.DataFrame)
+        assert not rfm.empty
+        assert set(['R_Score', 'F_Score', 'M_Score', 'Segment']).issubset(rfm.columns)
+
+    def test_rfm_fewer_than_four_customers_does_not_crash(self):
+        """
+        Regression: compute_rfm must NOT raise ValueError when fewer than 4
+        customers remain after filtering (e.g. country or date filter).
+        Previously crashed because pd.qcut(q=4) requires at least 4 distinct values.
+        """
+        df = pd.DataFrame({
+            'Invoice':     ['INV1', 'INV2', 'INV3'],
+            'CustomerID':  ['C1',   'C2',   'C3'],
+            'InvoiceDate': pd.to_datetime(['2024-05-01', '2024-04-15', '2024-03-10']),
+            'Revenue':     [50.0, 120.0, 75.0],
+        })
+        rfm = compute_rfm(df)   # must not raise
+        assert isinstance(rfm, pd.DataFrame)
+        assert not rfm.empty
+        assert set(['R_Score', 'F_Score', 'M_Score', 'Segment']).issubset(rfm.columns)
+
+    def test_rfm_single_customer_does_not_crash(self):
+        """
+        Edge case: only one customer left after filtering — should return a
+        single-row DataFrame with score 1 on all dimensions, not raise.
+        """
+        df = pd.DataFrame({
+            'Invoice':     ['INV1'],
+            'CustomerID':  ['C1'],
+            'InvoiceDate': pd.to_datetime(['2024-06-20']),
+            'Revenue':     [250.0],
+        })
+        rfm = compute_rfm(df)   # must not raise
+        assert isinstance(rfm, pd.DataFrame)
+        assert len(rfm) == 1
+        assert rfm.iloc[0]['R_Score'] == 1
+        assert rfm.iloc[0]['F_Score'] == 1
+        assert rfm.iloc[0]['M_Score'] == 1
+
 
 # TESTS: recommendation_engine.generate_recommendations()
 
