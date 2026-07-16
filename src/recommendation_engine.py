@@ -14,6 +14,51 @@ from src.analysis import (
 
 # RFM COMPUTATION
 
+def _safe_qcut(series: pd.Series, q: int, labels_asc: list) -> pd.Series:
+    """
+    Robust quantile-based scorer that avoids two common crash cases:
+
+    1. Non-unique bin edges — caused when many rows share the same raw value
+       (very common for Recency after date/country filtering).
+       Fix: rank with method='first' before cutting so every rank is unique.
+
+    2. Fewer unique values than requested quantiles (q > n_customers).
+       Fix: reduce q until it fits, then pad labels to match.
+       If q reaches 1 (only one distinct group possible), assign score 1 to all.
+
+    Parameters
+    ----------
+    series : pd.Series
+        The raw metric column (Recency, Frequency, or Monetary).
+    q : int
+        Desired number of quantile buckets (typically 4).
+    labels_asc : list
+        Integer labels in ascending order of the metric value.
+        For Recency (lower = better) pass [4, 3, 2, 1];
+        for Frequency/Monetary (higher = better) pass [1, 2, 3, 4].
+
+    Returns
+    -------
+    pd.Series[int]
+        Integer scores aligned with the input index.
+    """
+    n = len(series)
+    # Always rank first — eliminates non-unique bin-edge errors entirely
+    ranked = series.rank(method='first')
+
+    # Reduce q until we can actually form that many bins
+    effective_q = min(q, n)
+    while effective_q > 1:
+        try:
+            result = pd.qcut(ranked, q=effective_q,
+                             labels=labels_asc[::-1][:effective_q][::-1])
+            return result.astype(int)
+        except ValueError:
+            effective_q -= 1
+
+    # Absolute fallback: assign score 1 to every customer
+    return pd.Series(1, index=series.index, dtype=int)
+
 def compute_rfm(df: pd.DataFrame, reference_date: datetime = None) -> pd.DataFrame:
     """
     Computes Recency, Frequency, and Monetary (RFM) scores per customer.
@@ -66,12 +111,13 @@ def compute_rfm(df: pd.DataFrame, reference_date: datetime = None) -> pd.DataFra
         freq = df.groupby('CustomerID')['Revenue'].count().rename('Frequency').reset_index()
         rfm = rfm.merge(freq, on='CustomerID', how='left')
 
-    # Score each dimension 1–4 (4 = best)
-    rfm['R_Score'] = pd.qcut(rfm['Recency'], q=4, labels=[4, 3, 2, 1]).astype(int)
-    rfm['F_Score'] = pd.qcut(rfm['Frequency'].rank(method='first'), q=4,
-                             labels=[1, 2, 3, 4]).astype(int)
-    rfm['M_Score'] = pd.qcut(rfm['Monetary'].rank(method='first'), q=4,
-                             labels=[1, 2, 3, 4]).astype(int)
+    # Score each dimension 1–4 (4 = best).
+    # _safe_qcut always ranks first (rank='first') so duplicate raw values
+    # never produce non-unique bin edges, and it degrades gracefully when
+    # fewer than 4 customers remain after filtering.
+    rfm['R_Score'] = _safe_qcut(rfm['Recency'],   q=4, labels_asc=[4, 3, 2, 1])
+    rfm['F_Score'] = _safe_qcut(rfm['Frequency'],  q=4, labels_asc=[1, 2, 3, 4])
+    rfm['M_Score'] = _safe_qcut(rfm['Monetary'],   q=4, labels_asc=[1, 2, 3, 4])
 
     rfm['RFM_Score'] = rfm['R_Score'] + rfm['F_Score'] + rfm['M_Score']
 
