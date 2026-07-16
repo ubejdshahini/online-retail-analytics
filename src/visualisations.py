@@ -38,8 +38,10 @@ BASE_LAYOUT = dict(
 def _apply_base(fig: go.Figure, title: str) -> go.Figure:
     fig.update_layout(title=dict(text=title, font=dict(size=18, color=COLORS['text'])),
                       **BASE_LAYOUT)
-    fig.update_xaxes(showgrid=True, gridcolor=COLORS['border'], zeroline=False)
-    fig.update_yaxes(showgrid=True, gridcolor=COLORS['border'], zeroline=False)
+    fig.update_xaxes(showgrid=True, gridcolor=COLORS['border'], zeroline=False,
+                     automargin=True)
+    fig.update_yaxes(showgrid=True, gridcolor=COLORS['border'], zeroline=False,
+                     automargin=True)
     return fig
 
 
@@ -76,7 +78,7 @@ def plot_monthly_revenue(monthly_df: pd.DataFrame) -> go.Figure:
                          showgrid=False, color=COLORS['secondary'])
 
     fig.update_yaxes(title_text='Revenue (£)', secondary_y=False)
-    fig.update_xaxes(tickangle=-45)
+    fig.update_xaxes(tickangle=-45, automargin=True, tickfont=dict(size=11))
     return _apply_base(fig, 'Monthly Revenue & Order Volume')
 
 
@@ -305,7 +307,118 @@ def plot_product_return_rates(return_df: pd.DataFrame, n: int = 15) -> go.Figure
     return fig
 
 
-# CUSTOMER CHARTS
+# RETURNS CHARTS
+
+def plot_return_rate_over_time(return_trend_df: pd.DataFrame) -> go.Figure:
+    """
+    Dual-axis line chart: monthly return rate (%) on left axis,
+    revenue lost to returns (£) on right axis.
+    Input: output of get_return_rate_over_time().
+    """
+    if return_trend_df.empty:
+        return go.Figure()
+
+    fig = make_subplots(specs=[[{'secondary_y': True}]])
+
+    fig.add_trace(go.Scatter(
+        x=return_trend_df['YearMonth'],
+        y=return_trend_df['ReturnRate_%'],
+        name='Return Rate (%)',
+        mode='lines+markers',
+        line=dict(color=COLORS['danger'], width=2.5),
+        marker=dict(size=6),
+        hovertemplate='%{x}<br>Return rate: %{y:.1f}%<extra></extra>',
+    ), secondary_y=False)
+
+    fig.add_trace(go.Scatter(
+        x=return_trend_df['YearMonth'],
+        y=return_trend_df['RevenueLost'],
+        name='Revenue Lost (£)',
+        mode='lines+markers',
+        line=dict(color=COLORS['secondary'], width=2, dash='dot'),
+        marker=dict(size=5),
+        hovertemplate='%{x}<br>Revenue lost: £%{y:,.0f}<extra></extra>',
+    ), secondary_y=True)
+
+    fig.update_yaxes(title_text='Return Rate (%)', secondary_y=False,
+                     ticksuffix='%')
+    fig.update_yaxes(title_text='Revenue Lost (£)', secondary_y=True,
+                     showgrid=False, tickprefix='£')
+    fig.update_xaxes(tickangle=-45, automargin=True, tickfont=dict(size=11))
+    return _apply_base(fig, 'Return Rate & Revenue Lost Over Time')
+
+
+def plot_top_returning_customers(customers_df: pd.DataFrame) -> go.Figure:
+    """
+    Horizontal bar chart: top customers by revenue lost from their returns.
+    Input: output of get_top_returning_customers().
+    """
+    if customers_df.empty:
+        return go.Figure()
+
+    df = customers_df.sort_values('RevenueLost')
+    fig = go.Figure(go.Bar(
+        x=df['RevenueLost'],
+        y=df['CustomerID'].astype(str),
+        orientation='h',
+        marker_color=COLORS['danger'],
+        text=df['RevenueLost'].apply(lambda v: f'£{v:,.0f}'),
+        textposition='auto',
+        customdata=df[['ReturnTransactions']],
+        hovertemplate=(
+            'Customer: <b>%{y}</b><br>'
+            'Revenue lost: £%{x:,.0f}<br>'
+            'Return transactions: %{customdata[0]:,}<extra></extra>'
+        ),
+    ))
+    fig.update_xaxes(title_text='Revenue Lost to Returns (£)', tickprefix='£', automargin=True)
+    fig.update_yaxes(tickfont=dict(size=11), automargin=True)
+    return _apply_base(fig, 'Top Customers by Revenue Lost from Returns')
+
+
+def plot_returns_revenue_impact(impact_df: pd.DataFrame) -> go.Figure:
+    """
+    Stacked bar + line chart showing monthly Gross Revenue, Revenue Lost,
+    and Net Revenue — so the impact of returns is immediately visible.
+    Input: output of get_returns_revenue_impact().
+    """
+    if impact_df.empty:
+        return go.Figure()
+
+    fig = make_subplots(specs=[[{'secondary_y': True}]])
+
+    fig.add_trace(go.Bar(
+        x=impact_df['YearMonth'],
+        y=impact_df['GrossRevenue'],
+        name='Gross Revenue',
+        marker_color=COLORS['primary'],
+        opacity=0.7,
+        hovertemplate='%{x}<br>Gross: £%{y:,.0f}<extra></extra>',
+    ), secondary_y=False)
+
+    fig.add_trace(go.Bar(
+        x=impact_df['YearMonth'],
+        y=impact_df['RevenueLost'],
+        name='Revenue Lost to Returns',
+        marker_color=COLORS['danger'],
+        opacity=0.85,
+        hovertemplate='%{x}<br>Lost: £%{y:,.0f}<extra></extra>',
+    ), secondary_y=False)
+
+    fig.add_trace(go.Scatter(
+        x=impact_df['YearMonth'],
+        y=impact_df['NetRevenue'],
+        name='Net Revenue',
+        mode='lines+markers',
+        line=dict(color=COLORS['success'], width=2.5),
+        marker=dict(size=6),
+        hovertemplate='%{x}<br>Net: £%{y:,.0f}<extra></extra>',
+    ), secondary_y=False)
+
+    fig.update_layout(barmode='stack')
+    fig.update_yaxes(title_text='Revenue (£)', tickprefix='£', secondary_y=False)
+    fig.update_xaxes(tickangle=-45, automargin=True, tickfont=dict(size=11))
+    return _apply_base(fig, 'Monthly Revenue Impact of Returns')
 
 def plot_rfm_segments(seg_summary: pd.DataFrame) -> go.Figure:
     """
@@ -477,7 +590,7 @@ def plot_new_vs_returning(new_ret_df: pd.DataFrame) -> go.Figure:
             name=ctype, marker_color=color, opacity=0.85,
         ))
     fig.update_layout(barmode='stack')
-    fig.update_xaxes(tickangle=-45)
+    fig.update_xaxes(tickangle=-45, automargin=True, tickfont=dict(size=11))
     return _apply_base(fig, 'New vs Returning Customers per Month')
 
 
