@@ -24,6 +24,7 @@ COLORS = {
 }
 
 PALETTE = list(CHART_COLORS)
+SEGMENT_PALETTE = PALETTE + ['#06B6D4', '#F97316']
 
 BASE_LAYOUT = dict(
     paper_bgcolor=COLORS['background'],
@@ -314,26 +315,72 @@ def plot_rfm_segments(seg_summary: pd.DataFrame) -> go.Figure:
     if seg_summary.empty:
         return go.Figure()
 
+    label_positions = {
+        'Champions': 'top center',
+        'High Spenders': 'bottom center',
+        'At Risk': 'top center',
+        'Potential Loyalists': 'top right',
+        'Needs Attention': 'bottom center',
+        'Lost': 'top center',
+        'Recent Customers': 'middle left',
+        'Loyal Customers': 'middle right',
+    }
+    max_customers = max(float(seg_summary['Customers'].max()), 1)
+
     fig = go.Figure()
-    for i, row in seg_summary.iterrows():
+    for index, (_, row) in enumerate(seg_summary.iterrows()):
+        # Plotly treats scalar marker sizes as pixels, so calculate a bounded
+        # diameter directly. Square-root scaling preserves area proportionality
+        # without allowing a large segment to cover the chart.
+        bubble_size = 16 + np.sqrt(row['Customers'] / max_customers) * 44
         fig.add_trace(go.Scatter(
             x=[row['Avg_Recency_Days']],
             y=[row['Avg_Revenue']],
             mode='markers+text',
             name=row['Segment'],
             text=[row['Segment']],
-            textposition='top center',
+            textposition=label_positions.get(row['Segment'], 'top center'),
+            textfont=dict(size=11, color=COLORS['text']),
+            cliponaxis=False,
             marker=dict(
-                size=max(row['Customers'] / seg_summary['Customers'].max() * 80, 12),
-                color=PALETTE[i % len(PALETTE)],
+                size=bubble_size,
+                color=SEGMENT_PALETTE[index % len(SEGMENT_PALETTE)],
                 opacity=0.85,
-                line=dict(width=1, color=COLORS['background']),
+                line=dict(width=1.5, color=COLORS['background']),
+            ),
+            customdata=[[
+                row['Customers'],
+                row['Avg_Frequency'],
+                row['Total_Revenue'],
+            ]],
+            hovertemplate=(
+                '<b>%{text}</b><br>'
+                'Customers: %{customdata[0]:,.0f}<br>'
+                'Avg recency: %{x:,.0f} days<br>'
+                'Avg frequency: %{customdata[1]:,.1f} orders<br>'
+                'Avg revenue: £%{y:,.0f}<br>'
+                'Total revenue: £%{customdata[2]:,.0f}<extra></extra>'
             ),
         ))
-    fig.update_xaxes(title_text='Avg Days Since Last Purchase (Recency ↑ = worse)')
-    fig.update_yaxes(title_text='Avg Revenue per Customer (£)')
-    fig.update_layout(showlegend=False)
-    return _apply_base(fig, 'Customer Segments — Recency vs Revenue\n(bubble size = # customers)')
+    fig = _apply_base(
+        fig,
+        'Customer Segments — Recency vs Revenue (bubble size = customers)',
+    )
+    fig.update_xaxes(
+        title_text='Avg Days Since Last Purchase (Recency ↑ = worse)',
+        automargin=True,
+    )
+    fig.update_yaxes(
+        title_text='Avg Revenue per Customer (£)',
+        automargin=True,
+        rangemode='tozero',
+    )
+    fig.update_layout(
+        showlegend=False,
+        height=500,
+        margin=dict(l=75, r=65, t=80, b=75),
+    )
+    return fig
 
 
 def plot_segment_revenue_share(seg_summary: pd.DataFrame) -> go.Figure:
@@ -341,22 +388,60 @@ def plot_segment_revenue_share(seg_summary: pd.DataFrame) -> go.Figure:
     if seg_summary.empty:
         return go.Figure()
 
+    total_revenue = seg_summary['Total_Revenue'].sum()
+    revenue_shares = (
+        seg_summary['Total_Revenue'] / total_revenue * 100
+        if total_revenue else pd.Series(0, index=seg_summary.index)
+    )
+    inside_labels = [
+        f'<b>{segment}</b><br>{share:.1f}%'
+        if share >= 5 else ''
+        for segment, share in zip(seg_summary['Segment'], revenue_shares)
+    ]
+    segment_colors = [
+        SEGMENT_PALETTE[index % len(SEGMENT_PALETTE)]
+        for index in range(len(seg_summary))
+    ]
+
     fig = go.Figure(go.Pie(
         labels=seg_summary['Segment'],
         values=seg_summary['Total_Revenue'],
-        hole=0.55,
-        marker=dict(colors=PALETTE[:len(seg_summary)],
+        hole=0.60,
+        domain=dict(x=[0.00, 0.68], y=[0.04, 0.96]),
+        marker=dict(colors=segment_colors,
                     line=dict(color=COLORS['background'], width=2)),
-        textinfo='label+percent',
-        hovertemplate='%{label}<br>Revenue: £%{value:,.0f}<extra></extra>',
+        text=inside_labels,
+        textinfo='text',
+        textposition='inside',
+        sort=False,
+        hovertemplate=(
+            '<b>%{label}</b><br>'
+            'Revenue: £%{value:,.0f}<br>'
+            'Share: %{percent}<extra></extra>'
+        ),
     ))
+    fig = _apply_base(fig, 'Revenue Share by Customer Segment')
     fig.update_layout(
-        annotations=[dict(text='Revenue<br>Share', x=0.5, y=0.5,
-                          font_size=14, showarrow=False,
-                          font_color=COLORS['text'])],
-        showlegend=False,
+        annotations=[dict(text='Revenue<br>Share', x=0.34, y=0.5,
+                           font_size=14, showarrow=False,
+                           font_color=COLORS['text'])],
+        showlegend=True,
+        height=500,
+        uniformtext_minsize=11,
+        uniformtext_mode='hide',
+        legend=dict(
+            title=dict(text='Customer segments', font=dict(size=12)),
+            orientation='v',
+            yanchor='middle',
+            y=0.5,
+            xanchor='left',
+            x=0.73,
+            font=dict(size=11),
+            itemsizing='constant',
+        ),
+        margin=dict(l=20, r=20, t=75, b=35),
     )
-    return _apply_base(fig, 'Revenue Share by Customer Segment')
+    return fig
 
 
 def plot_clv_distribution(clv_df: pd.DataFrame) -> go.Figure:

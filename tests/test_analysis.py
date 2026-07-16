@@ -19,7 +19,7 @@ from src.analysis import (
 from src.recommendation_engine import compute_rfm, get_segment_summary, generate_recommendations
 from src.visualisations import (
     plot_monthly_revenue, plot_monthly_product_revenue,
-    plot_revenue_by_hour,
+    plot_revenue_by_hour, plot_rfm_segments, plot_segment_revenue_share,
 )
 
 
@@ -283,3 +283,38 @@ class TestHourlyRevenueVisualisation:
         assert len(fig.data) == 2
         assert all(trace.fill in (None, 'none') for trace in fig.data)
         assert all(trace.mode == 'lines+markers' for trace in fig.data)
+
+
+class TestCustomerSegmentVisualisations:
+    def test_bubble_labels_use_distinct_positions_and_are_not_clipped(self):
+        summary = pd.DataFrame({
+            'Segment': ['Champions', 'High Spenders', 'Recent Customers', 'Loyal Customers'],
+            'Customers': [100, 60, 40, 35],
+            'Avg_Recency_Days': [30, 45, 20, 22],
+            'Avg_Frequency': [12, 5, 2, 8],
+            'Avg_Revenue': [500, 420, 80, 90],
+            'Total_Revenue': [50000, 25200, 3200, 3150],
+        })
+
+        fig = plot_rfm_segments(summary)
+
+        positions = {trace.name: trace.textposition for trace in fig.data}
+        assert positions['Recent Customers'] != positions['Loyal Customers']
+        assert all(trace.cliponaxis is False for trace in fig.data)
+        assert all(16 <= trace.marker.size <= 60 for trace in fig.data)
+        assert fig.layout.margin.r >= 60
+
+    def test_donut_uses_inside_labels_and_complete_legend(self):
+        summary = pd.DataFrame({
+            'Segment': ['Champions', 'At Risk', 'Lost'],
+            'Total_Revenue': [80000, 19000, 1000],
+        })
+
+        fig = plot_segment_revenue_share(summary)
+        pie = fig.data[0]
+
+        assert pie.textposition == 'inside'
+        assert pie.text[-1] == ''
+        assert len(pie.marker.colors) == len(summary)
+        assert fig.layout.showlegend is True
+        assert fig.layout.legend.orientation == 'v'

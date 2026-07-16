@@ -285,22 +285,22 @@ if page == ":material/home: Data & Upload":
             type=["csv"],
             key="uploader",
         )
+        
+        #st.markdown("— **OR** —")
 
-        st.markdown("— **OR** —")
-
-        if st.button("Load local default dataset (`data/cleaned_retail_data.csv`)"):
-            import os
-            default_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'cleaned_retail_data.csv')
-            if os.path.exists(default_path):
-                with st.spinner("Loading local file..."):
-                    df = pd.read_csv(default_path, parse_dates=['InvoiceDate'])
-                    if 'CustomerID' in df.columns:
-                        df['CustomerID'] = df['CustomerID'].fillna('Guest').astype(str)
-                    st.session_state['df_clean'] = df
-                    st.session_state['filename'] = 'cleaned_retail_data.csv'
-                st.success(":material/check_circle: Local default dataset loaded successfully!")
-            else:
-                st.error(":material/cancel: `cleaned_retail_data.csv` not found in `data/`. Please run `01_data_exploration.ipynb` first.")
+        #if st.button("Load local default dataset (`data/cleaned_retail_data.csv`)"):
+        #    import os
+        #    default_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'cleaned_retail_data.csv')
+        #    if os.path.exists(default_path):
+        #        with st.spinner("Loading local file..."):
+        #            df = pd.read_csv(default_path, parse_dates=['InvoiceDate'])
+        #            if 'CustomerID' in df.columns:
+        #                df['CustomerID'] = df['CustomerID'].fillna('Guest').astype(str)
+        #            st.session_state['df_clean'] = df
+        #            st.session_state['filename'] = 'cleaned_retail_data.csv'
+        #        st.success(":material/check_circle: Local default dataset loaded successfully!")
+        #    else:
+        #        st.error(":material/cancel: `cleaned_retail_data.csv` not found in `data/`. Please run `01_data_exploration.ipynb` first.")
 
         if uploaded:
             df = load_and_clean(uploaded)
@@ -312,20 +312,7 @@ if page == ":material/home: Data & Upload":
                     f"**{len(df):,}** rows after cleaning."
                 )
 
-    with col2:
-        st.markdown("### Expected Format")
-        st.markdown("""
-| Column | Type |
-|--------|------|
-| `Invoice` | string |
-| `StockCode` | string |
-| `Description` | string |
-| `Quantity` | integer |
-| `InvoiceDate` | datetime |
-| `Price` | float |
-| `Customer ID` | float/str |
-| `Country` | string |
-        """)
+   
 
     # Show currently loaded file
     if st.session_state['df_clean'] is not None:
