@@ -27,6 +27,7 @@ from src.visualisations import (
     format_kpi_cards,
 )
 from src.theme import css_variables
+from src.about_page import render_about_page
 
 # Required columns for validation
 # Raw format uses 'Price' and 'Customer ID'; cleaned export uses 'UnitPrice' and 'CustomerID'
@@ -172,7 +173,12 @@ with st.sidebar:
 
     page = st.radio(
         "Navigate",
-        [":material/home: Data & Upload", ":material/analytics: Analytics Dashboard", ":material/insights: Insights & Actions"],
+        [
+            ":material/home: Data & Upload",
+            ":material/analytics: Analytics Dashboard",
+            ":material/insights: Insights & Actions",
+            ":material/info: About & Methodology",
+        ],
         label_visibility='collapsed',
     )
 
@@ -650,4 +656,13 @@ elif page == ":material/insights: Insights & Actions":
             file_name="retail_analytics_report.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+
+
+# PAGE: ABOUT & METHODOLOGY
+
+elif page == ":material/info: About & Methodology":
+    render_about_page(
+        st.session_state['df_clean'],
+        st.session_state['filename'],
+    )
 

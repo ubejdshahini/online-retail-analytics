@@ -12,6 +12,7 @@ import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.data_cleaning import clean_data
+from src.about_page import get_dataset_profile
 from src.analysis import (
     get_kpi_summary, get_return_summary, get_monthly_revenue,
     get_monthly_product_revenue, get_revenue_by_hour,
@@ -318,3 +319,22 @@ class TestCustomerSegmentVisualisations:
         assert len(pie.marker.colors) == len(summary)
         assert fig.layout.showlegend is True
         assert fig.layout.legend.orientation == 'v'
+
+
+class TestAboutPageDatasetProfile:
+    def test_profile_reflects_loaded_dataset(self, cleaned_df):
+        profile = get_dataset_profile(cleaned_df, 'monthly_sales.csv')
+
+        assert profile['loaded'] is True
+        assert profile['filename'] == 'monthly_sales.csv'
+        assert profile['rows'] == len(cleaned_df)
+        assert profile['customers'] == cleaned_df.loc[
+            cleaned_df['CustomerID'] != 'Guest', 'CustomerID'
+        ].nunique()
+        assert profile['countries'] == cleaned_df['Country'].nunique()
+        assert profile['net_revenue'] == pytest.approx(cleaned_df['Revenue'].sum())
+
+    def test_profile_handles_no_loaded_dataset(self):
+        profile = get_dataset_profile(None)
+
+        assert profile == {'loaded': False, 'filename': 'No dataset loaded'}
