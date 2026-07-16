@@ -242,43 +242,86 @@ def generate_recommendations(df: pd.DataFrame) -> list[dict]:
                 'priority': 'Low'
             })
 
-    # Rule 6: Peak hour / day opportunity
+    # Rule 6: Peak hour — only surface if top 2 hours carry a disproportionate
+    # share of daily revenue (>40%), which is non-obvious from the bar chart alone.
     if 'InvoiceDate' in df.columns and 'Revenue' in df.columns:
         hourly = get_revenue_by_hour(df)
         if not hourly.empty:
-            peak_hour = hourly.loc[hourly['Revenue'].idxmax(), 'Hour']
-            dow = get_revenue_by_day_of_week(df)
-            peak_day = dow.loc[dow['Revenue'].idxmax(), 'DayOfWeek'] if not dow.empty else 'N/A'
-            recommendations.append({
-                'type': 'Marketing',
-                'segment': 'All',
-                'title': 'Time Promotions for Maximum Impact',
-                'message': (
-                    f"Sales peak at {int(peak_hour)}:00 and on {peak_day}s. "
-                    "Schedule email campaigns and flash sales at these times to "
-                    "maximise open rates and conversion."
-                ),
-                'impact_pct': 2.0,
-                'priority': 'Medium'
-            })
+            total_hourly_rev = hourly['Revenue'].sum()
+            if total_hourly_rev > 0:
+                top2_rev = hourly.nlargest(2, 'Revenue')['Revenue'].sum()
+                top2_pct = round(top2_rev / total_hourly_rev * 100, 1)
+                if top2_pct >= 40:
+                    peak_hours = hourly.nlargest(2, 'Revenue')['Hour'].tolist()
+                    hours_str = ' and '.join(f'{int(h)}:00' for h in sorted(peak_hours))
+                    dow = get_revenue_by_day_of_week(df)
+                    peak_day = dow.loc[dow['Revenue'].idxmax(), 'DayOfWeek'] if not dow.empty else None
+                    day_note = f" on {peak_day}s" if peak_day else ""
+                    recommendations.append({
+                        'type': 'Marketing',
+                        'segment': 'All',
+                        'title': 'Revenue Is Dangerously Concentrated in Two Hours',
+                        'message': (
+                            f"**{top2_pct}%** of all daily revenue arrives between {hours_str}{day_note}. "
+                            "This is a structural risk: a single disruption (outage, delayed email) "
+                            "during those windows costs nearly half your daily income. "
+                            "Run A/B tests to spread demand — staggered promotions or morning flash "
+                            "sales can reduce this concentration while growing total volume."
+                        ),
+                        'impact_pct': round(top2_pct * 0.04, 1),
+                        'priority': 'Medium'
+                    })
 
     # Rule 7: Single-purchase customers
     if 'Frequency' in rfm.columns:
         one_timers = rfm[rfm['Frequency'] == 1]
         if len(one_timers) > 0:
             one_pct = round(len(one_timers) / len(rfm) * 100, 1)
+            # Calculate how much revenue is locked in one-timers
+            one_timer_revenue = one_timers['Monetary'].sum()
+            avg_loyal_monetary = rfm[rfm['Frequency'] > 2]['Monetary'].mean() if len(rfm[rfm['Frequency'] > 2]) > 0 else 0
+            uplift_potential = (avg_loyal_monetary - one_timers['Monetary'].mean()) * len(one_timers) * 0.15
             recommendations.append({
                 'type': 'Cross-Sell',
                 'segment': 'Recent Customers',
                 'title': 'Convert One-Time Buyers to Repeat Customers',
                 'message': (
-                    f"{one_pct}% of your customers ({len(one_timers)}) have only bought once. "
-                    "A follow-up email 7 days after their first purchase with a 'You might also like' "
-                    "product suggestion can increase repeat purchase rates by 20–30%."
+                    f"**{one_pct}%** of customers ({len(one_timers):,}) have purchased exactly once, "
+                    f"generating £{one_timer_revenue:,.0f} total. "
+                    "If just 15% of them make a second purchase at the loyalty-customer average, "
+                    f"that adds ~£{uplift_potential:,.0f} in incremental revenue. "
+                    "A triggered email 7 days post-purchase with a 10% second-order incentive "
+                    "is the single highest-ROI action for this segment."
                 ),
                 'impact_pct': round(one_pct * 0.10, 1),
                 'priority': 'High'
             })
+
+    # Rule 8: Return rate spike — flag the single worst month if its rate is
+    # materially above the annual average (non-obvious without trend analysis).
+    if 'IsReturn' in df.columns and 'InvoiceDate' in df.columns:
+        from src.analysis import get_return_rate_over_time
+        trend = get_return_rate_over_time(df)
+        if not trend.empty and len(trend) >= 3:
+            avg_rate = trend['ReturnRate_%'].mean()
+            worst = trend.loc[trend['ReturnRate_%'].idxmax()]
+            spike = worst['ReturnRate_%'] - avg_rate
+            if spike >= 5:  # at least 5 pp above average
+                recommendations.append({
+                    'type': 'Quality / Operations',
+                    'segment': 'All',
+                    'title': f"Return Rate Spike in {worst['YearMonth']} Needs Investigation",
+                    'message': (
+                        f"The return rate in **{worst['YearMonth']}** was **{worst['ReturnRate_%']:.1f}%** — "
+                        f"{spike:.1f} percentage points above your {avg_rate:.1f}% annual average. "
+                        f"That month alone cost £{worst['RevenueLost']:,.0f} in lost revenue. "
+                        "Isolated spikes like this typically trace to a single product batch, "
+                        "a fulfilment error, or a quality issue. Audit the top-returned products "
+                        "from that month before the pattern repeats."
+                    ),
+                    'impact_pct': round(worst['RevenueLost'] / rfm['Monetary'].sum() * 100, 1),
+                    'priority': 'High'
+                })
 
     # Sort by impact descending
     recommendations.sort(key=lambda x: x['impact_pct'], reverse=True)

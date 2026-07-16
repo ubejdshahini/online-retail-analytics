@@ -286,6 +286,72 @@ def get_return_summary(df: pd.DataFrame) -> dict:
     }
 
 
+def get_return_rate_over_time(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Returns monthly return rate (%) and revenue lost to returns over time.
+    Useful for spotting seasonal spikes or improving trends.
+    """
+    if 'IsReturn' not in df.columns or 'InvoiceDate' not in df.columns or 'Revenue' not in df.columns:
+        return pd.DataFrame()
+
+    df = df.copy()
+    df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
+    df['YearMonth'] = df['InvoiceDate'].dt.to_period('M')
+
+    total_by_month  = df.groupby('YearMonth').size().rename('TotalRows')
+    return_by_month = df[df['IsReturn']].groupby('YearMonth').size().rename('ReturnRows')
+    rev_lost        = df[df['IsReturn']].groupby('YearMonth')['Revenue'].sum().abs().rename('RevenueLost')
+
+    result = pd.concat([total_by_month, return_by_month, rev_lost], axis=1).fillna(0)
+    result['ReturnRate_%'] = (result['ReturnRows'] / result['TotalRows'] * 100).round(2)
+    result = result.reset_index()
+    result['YearMonth'] = result['YearMonth'].astype(str)
+    return result
+
+
+def get_top_returning_customers(df: pd.DataFrame, n: int = 15) -> pd.DataFrame:
+    """
+    Returns the top N customers (excluding Guest) by number of return transactions
+    and total revenue lost from their returns.
+    Highlights customers whose return behaviour disproportionately impacts revenue.
+    """
+    required = {'IsReturn', 'CustomerID', 'Revenue'}
+    if not required.issubset(df.columns):
+        return pd.DataFrame()
+
+    returns_df = df[(df['IsReturn']) & (df['CustomerID'] != 'Guest')].copy()
+    if returns_df.empty:
+        return pd.DataFrame()
+
+    result = returns_df.groupby('CustomerID').agg(
+        ReturnTransactions=('IsReturn', 'count'),
+        RevenueLost=('Revenue', lambda x: abs(x.sum())),
+    ).reset_index()
+    result = result.sort_values('RevenueLost', ascending=False).head(n)
+    return result
+
+
+def get_returns_revenue_impact(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Returns monthly gross revenue vs revenue lost to returns,
+    so the dashboard can show the net impact clearly.
+    """
+    if 'IsReturn' not in df.columns or 'InvoiceDate' not in df.columns or 'Revenue' not in df.columns:
+        return pd.DataFrame()
+
+    df = df.copy()
+    df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
+    df['YearMonth'] = df['InvoiceDate'].dt.to_period('M')
+
+    gross   = df[~df['IsReturn']].groupby('YearMonth')['Revenue'].sum().rename('GrossRevenue')
+    lost    = df[ df['IsReturn']].groupby('YearMonth')['Revenue'].sum().abs().rename('RevenueLost')
+
+    result = pd.concat([gross, lost], axis=1).fillna(0).reset_index()
+    result['YearMonth'] = result['YearMonth'].astype(str)
+    result['NetRevenue'] = result['GrossRevenue'] - result['RevenueLost']
+    return result
+
+
 # OVERALL KPI SUMMARY
 
 def get_kpi_summary(df: pd.DataFrame) -> dict:
