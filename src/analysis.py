@@ -4,7 +4,11 @@ Functions for deep EDA and retail data analysis.
 
 import pandas as pd
 import numpy as np
-
+from src.data_filters import (
+    get_product_rows,
+    get_product_sales,
+    get_product_returns,
+)
 
 # REVENUE ANALYSIS
 
@@ -28,11 +32,32 @@ def get_monthly_revenue(df: pd.DataFrame) -> pd.DataFrame:
     return monthly
 
 
-def get_monthly_product_revenue(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
-    """Return monthly net revenue for the top ``n`` products by total revenue."""
-    required = {'InvoiceDate', 'Description', 'Revenue'}
-    if not required.issubset(df.columns) or df.empty or n < 1:
-        return pd.DataFrame(columns=['YearMonth', 'Description', 'Revenue'])
+def get_monthly_product_revenue(
+    df: pd.DataFrame,
+    n: int = 5
+) -> pd.DataFrame:
+    """Return monthly revenue for top real products."""
+
+    df = get_product_sales(df)
+
+    required = {
+        'InvoiceDate',
+        'Description',
+        'Revenue'
+    }
+
+    if (
+        not required.issubset(df.columns)
+        or df.empty
+        or n < 1
+    ):
+        return pd.DataFrame(
+            columns=[
+                'YearMonth',
+                'Description',
+                'Revenue'
+            ]
+        )
 
     product_df = df.loc[:, ['InvoiceDate', 'Description', 'Revenue']].copy()
     product_df['InvoiceDate'] = pd.to_datetime(product_df['InvoiceDate'], errors='coerce')
@@ -131,45 +156,142 @@ def get_revenue_by_day_of_week(df: pd.DataFrame) -> pd.DataFrame:
 
 # PRODUCT ANALYSIS
 
-def get_top_products(df: pd.DataFrame, n: int = 10) -> pd.DataFrame:
-    """Returns top N products by revenue and quantity sold."""
-    if 'Description' not in df.columns or 'Revenue' not in df.columns:
+def get_top_products(
+    df: pd.DataFrame,
+    n: int = 10
+) -> pd.DataFrame:
+    """
+    Return top N real products by revenue and quantity sold.
+    """
+    product_df = get_product_sales(df)
+
+    required = {
+        'Description',
+        'Revenue',
+        'Quantity'
+    }
+
+    if (
+        product_df.empty
+        or not required.issubset(product_df.columns)
+    ):
         return pd.DataFrame()
 
-    top = df.groupby('Description').agg(
-        Revenue=('Revenue', 'sum'),
-        Quantity=('Quantity', 'sum'),
-        Transactions=('Revenue', 'count')
-    ).reset_index()
-    top = top.sort_values('Revenue', ascending=False).head(n)
+    top = (
+        product_df
+        .groupby('Description')
+        .agg(
+            Revenue=('Revenue', 'sum'),
+            Quantity=('Quantity', 'sum'),
+            Transactions=('Revenue', 'count')
+        )
+        .reset_index()
+        .sort_values(
+            'Revenue',
+            ascending=False
+        )
+        .head(n)
+    )
+
     return top
 
 
-def get_worst_products(df: pd.DataFrame, n: int = 10) -> pd.DataFrame:
-    """Returns bottom N products by revenue — candidates for discontinuation."""
-    if 'Description' not in df.columns or 'Revenue' not in df.columns:
+def get_worst_products(
+    df: pd.DataFrame,
+    n: int = 10) -> pd.DataFrame:
+    """
+    Return bottom N real products by positive sales revenue.
+    """
+    product_df = get_product_sales(df)
+
+    required = {
+        'Description',
+        'Revenue',
+        'Quantity'
+    }
+
+    if (
+        product_df.empty
+        or not required.issubset(product_df.columns)
+    ):
         return pd.DataFrame()
 
-    worst = df.groupby('Description').agg(
-        Revenue=('Revenue', 'sum'),
-        Quantity=('Quantity', 'sum')
-    ).reset_index()
-    worst = worst[worst['Revenue'] > 0].sort_values('Revenue').head(n)
+    worst = (
+        product_df
+        .groupby('Description')
+        .agg(
+            Revenue=('Revenue', 'sum'),
+            Quantity=('Quantity', 'sum')
+        )
+        .reset_index()
+    )
+
+    worst = (
+        worst[
+            worst['Revenue'] > 0
+        ]
+        .sort_values('Revenue')
+        .head(n)
+    )
+
     return worst
 
 
-def get_product_return_rate(df: pd.DataFrame) -> pd.DataFrame:
-    """Returns return rate per product — high return rate signals quality issues."""
-    if 'Description' not in df.columns or 'IsReturn' not in df.columns:
+def get_product_return_rate(
+    df: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Return return rate for actual retail products only.
+    """
+    product_df = get_product_rows(df)
+
+    required = {
+        'Description',
+        'Quantity',
+        'IsReturn'
+    }
+
+    if (
+        product_df.empty
+        or not required.issubset(product_df.columns)
+    ):
         return pd.DataFrame()
 
-    total = df.groupby('Description')['Quantity'].count().rename('Total')
-    returns = df[df['IsReturn']].groupby('Description')['Quantity'].count().rename('Returns')
-    result = pd.concat([total, returns], axis=1).fillna(0)
-    result['ReturnRate_%'] = (result['Returns'] / result['Total'] * 100).round(2)
-    result = result.sort_values('ReturnRate_%', ascending=False).reset_index()
-    return result
+    total = (
+        product_df
+        .groupby('Description')['Quantity']
+        .count()
+        .rename('Total')
+    )
 
+    returns = (
+        product_df[
+            product_df['IsReturn']
+        ]
+        .groupby('Description')['Quantity']
+        .count()
+        .rename('Returns')
+    )
+
+    result = pd.concat(
+        [total, returns],
+        axis=1
+    ).fillna(0)
+
+    result['ReturnRate_%'] = (
+        result['Returns']
+        / result['Total']
+        * 100
+    ).round(2)
+
+    return (
+        result
+        .sort_values(
+            'ReturnRate_%',
+            ascending=False
+        )
+        .reset_index()
+    )
 
 # CUSTOMER ANALYSIS
 
@@ -382,7 +504,19 @@ def get_kpi_summary(df: pd.DataFrame) -> dict:
         kpis['top_country'] = df.groupby('Country')['Revenue'].sum().idxmax()
 
     if 'Description' in df.columns and 'Revenue' in df.columns:
-        kpis['best_product'] = df.groupby('Description')['Revenue'].sum().idxmax()
+        product_df = get_product_sales(df)
+
+        if not product_df.empty:
+            product_revenue = (
+                product_df
+                .groupby('Description')['Revenue']
+                .sum()
+            )
+
+            if not product_revenue.empty:
+                kpis['best_product'] = (
+                    product_revenue.idxmax()
+                )
 
     if 'IsReturn' in df.columns:
         kpis['return_rate_%'] = round(df['IsReturn'].mean() * 100, 2)

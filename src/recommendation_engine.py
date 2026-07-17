@@ -11,6 +11,7 @@ from src.analysis import (
     get_revenue_by_hour,
     get_revenue_by_day_of_week
 )
+from src.data_filters import get_product_sales
 
 # RFM COMPUTATION
 
@@ -82,7 +83,13 @@ def compute_rfm(df: pd.DataFrame, reference_date: datetime = None) -> pd.DataFra
         return pd.DataFrame()
 
     # Exclude guests and returns for CLV-based RFM
-    df = df[(df['CustomerID'] != 'Guest') & (df['Revenue'] > 0)].copy()
+    df = get_product_sales(df)
+
+    df = df[df['CustomerID'] != 'Guest'].copy()
+
+    if df.empty:
+        return pd.DataFrame()
+
     df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
 
     if reference_date is None:
@@ -127,27 +134,42 @@ def compute_rfm(df: pd.DataFrame, reference_date: datetime = None) -> pd.DataFra
 
 
 def _assign_segment(row) -> str:
-    """Maps RFM scores to business-friendly segment names."""
-    r, f, m = row['R_Score'], row['F_Score'], row['M_Score']
-    score = row['RFM_Score']
+    """
+    Maps RFM values and scores to business-friendly segment names.
+    """
+    r = row['R_Score']
+    f = row['F_Score']
+    m = row['M_Score']
+
+    frequency = row['Frequency']
+
+    # Check actual purchase count first
+    if frequency == 1:
+        return 'One-Time Buyers'
 
     if r >= 3 and f >= 3 and m >= 3:
-        return 'Champions'           # Bought recently, often, and spend most
-    elif r >= 3 and f >= 3:
-        return 'Loyal Customers'     # Buy often and recently
-    elif r >= 3 and m >= 3:
-        return 'High Spenders'       # Spend a lot but moderate frequency
-    elif r >= 3 and f <= 2:
-        return 'Recent Customers'    # Bought recently but not often yet
-    elif r <= 2 and f >= 3 and m >= 3:
-        return 'At Risk'             # Were great customers, haven't returned
-    elif r <= 2 and f >= 3:
-        return 'Needs Attention'     # Frequent before, now drifting
-    elif r == 1 and f == 1 and m == 1:
-        return 'Lost'                # Haven't bought in a long time, low value
-    else:
-        return 'Potential Loyalists' # Promising but need nurturing
+        return 'Champions'
 
+    elif r >= 3 and f >= 3:
+        return 'Loyal Customers'
+
+    elif r >= 3 and m >= 3:
+        return 'High Spenders'
+
+    elif r >= 3 and f <= 2:
+        return 'Recent Customers'
+
+    elif r <= 2 and f >= 3 and m >= 3:
+        return 'At Risk'
+
+    elif r <= 2 and f >= 3:
+        return 'Needs Attention'
+
+    elif r == 1 and f == 1 and m == 1:
+        return 'Lost'
+
+    else:
+        return 'Potential Loyalists'
 
 def get_segment_summary(rfm: pd.DataFrame) -> pd.DataFrame:
     """
@@ -174,18 +196,21 @@ def get_segment_summary(rfm: pd.DataFrame) -> pd.DataFrame:
 def generate_recommendations(df: pd.DataFrame) -> list[dict]:
     """
     Generates rule-based business recommendations.
-    Each recommendation includes:
-      - type        : category of recommendation
-      - segment     : which customer group it targets (if applicable)
-      - title       : short action label
-      - message     : detailed explanation for the client
-      - impact_pct  : estimated % improvement in profit if acted upon
-      - priority    : 'High' / 'Medium' / 'Low'
 
-    Returns
-    -------
-    list[dict]
-        Sorted by impact_pct descending.
+    Each recommendation includes:
+        - type         : recommendation category
+        - segment      : target customer or product group
+        - title        : short action label
+        - message      : explanation and suggested action
+        - impact_pct   : heuristic estimate of possible impact
+        - impact_type  : identifies the value as an estimate
+        - priority     : High, Medium, or Low
+
+    Important
+    ---------
+    impact_pct values are heuristic estimates based on
+    assumptions and observed dataset patterns. They are
+    not guaranteed predictions or financial forecasts.
     """
     recommendations = []
 
@@ -319,27 +344,73 @@ def generate_recommendations(df: pd.DataFrame) -> list[dict]:
                     })
 
     # Rule 7: Single-purchase customers
+    # Rule 7: Single-purchase customers
     if 'Frequency' in rfm.columns:
-        one_timers = rfm[rfm['Frequency'] == 1]
+        one_timers = rfm[
+            rfm['Frequency'] == 1
+        ]
+
         if len(one_timers) > 0:
-            one_pct = round(len(one_timers) / len(rfm) * 100, 1)
-            # Calculate how much revenue is locked in one-timers
-            one_timer_revenue = one_timers['Monetary'].sum()
-            avg_loyal_monetary = rfm[rfm['Frequency'] > 2]['Monetary'].mean() if len(rfm[rfm['Frequency'] > 2]) > 0 else 0
-            uplift_potential = (avg_loyal_monetary - one_timers['Monetary'].mean()) * len(one_timers) * 0.15
+            one_pct = round(
+                len(one_timers) / len(rfm) * 100,
+                1
+            )
+
+            one_timer_revenue = (
+                one_timers['Monetary'].sum()
+            )
+
+            loyal_customers = rfm[
+                rfm['Frequency'] > 2
+            ]
+
+            if not loyal_customers.empty:
+                avg_loyal_monetary = (
+                    loyal_customers['Monetary'].mean()
+                )
+            else:
+                avg_loyal_monetary = 0
+
+            avg_one_timer_monetary = (
+                one_timers['Monetary'].mean()
+            )
+
+            revenue_difference = max(
+                avg_loyal_monetary
+                - avg_one_timer_monetary,
+                0
+            )
+
+            uplift_potential = (
+                revenue_difference
+                * len(one_timers)
+                * 0.15
+            )
+
             recommendations.append({
                 'type': 'Cross-Sell',
-                'segment': 'Recent Customers',
-                'title': 'Convert One-Time Buyers to Repeat Customers',
-                'message': (
-                    f"**{one_pct}%** of customers ({len(one_timers):,}) have purchased exactly once, "
-                    f"generating £{one_timer_revenue:,.0f} total. "
-                    "If just 15% of them make a second purchase at the loyalty-customer average, "
-                    f"that adds ~£{uplift_potential:,.0f} in incremental revenue. "
-                    "A triggered email 7 days post-purchase with a 10% second-order incentive "
-                    "is the single highest-ROI action for this segment."
+                'segment': 'One-Time Buyers',
+                'title': (
+                    'Convert One-Time Buyers '
+                    'to Repeat Customers'
                 ),
-                'impact_pct': round(one_pct * 0.10, 1),
+                'message': (
+                    f"**{one_pct}%** of customers "
+                    f"({len(one_timers):,}) have purchased "
+                    "exactly once, generating "
+                    f"£{one_timer_revenue:,.0f} in total. "
+                    "A follow-up email after the first purchase, "
+                    "combined with a second-order incentive, "
+                    "may encourage repeat purchases. "
+                    "Based on a 15% conversion assumption, "
+                    "the estimated additional revenue is "
+                    f"approximately £{uplift_potential:,.0f}."
+                ),
+                'impact_pct': round(
+                    one_pct * 0.10,
+                    1
+                ),
+                'impact_type': 'Heuristic estimate',
                 'priority': 'High'
             })
 
