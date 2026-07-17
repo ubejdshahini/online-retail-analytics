@@ -14,8 +14,10 @@ from src.visualisations import (
     plot_monthly_revenue, plot_monthly_product_revenue,
     plot_revenue_by_hour, plot_revenue_by_day_of_week,
     plot_top_products, plot_product_return_rates,
-    plot_rfm_segments, plot_segment_revenue_share, plot_clv_distribution,
-    plot_new_vs_returning, plot_country_revenue, plot_top_countries_bar,
+    plot_rfm_segments, plot_segment_revenue_share,
+    #plot_clv_distribution,
+    #plot_new_vs_returning, 
+    plot_country_revenue, plot_top_countries_bar,
     format_kpi_cards,
     plot_return_rate_over_time, plot_top_returning_customers, plot_returns_revenue_impact,
 )
@@ -26,8 +28,9 @@ from src.analysis import (
     get_revenue_by_hour,
     get_revenue_by_day_of_week, get_top_products, get_worst_products,
     get_product_return_rate, get_country_performance,
-    get_customer_lifetime_value, get_new_vs_returning_customers,
-    get_churned_customers, get_return_summary,
+    #get_customer_lifetime_value, #get_new_vs_returning_customers,
+    #get_churned_customers, 
+    get_return_summary,
     get_return_rate_over_time, get_top_returning_customers, get_returns_revenue_impact,
 )
 from src.data_cleaning import clean_data, validate_data, add_product_flag
@@ -251,6 +254,8 @@ if st.session_state["df_clean"] is not None:
             .astype(str)
         )
 
+if "validation_reports" not in st.session_state:
+    st.session_state["validation_reports"] = []
 
 # SIDEBAR
 
@@ -347,6 +352,16 @@ def _process_single_df(
 
     # Validate data
     is_valid, report = validate_data(df_raw)
+
+    validation_entry = {
+        "source": source_label,
+        "is_valid": is_valid,
+        "report": report,
+    }
+
+    st.session_state["validation_reports"] = [
+        validation_entry
+    ]
 
     with st.expander(
         f":material/list_alt: Validation report — {source_label}",
@@ -541,6 +556,8 @@ if page == ":material/home: Data & Upload":
 
             if st.session_state.get("last_uploaded_file") != file_identity:
                 st.session_state["last_uploaded_file"] = file_identity
+                st.session_state["validation_reports"] = []
+
                 st.session_state["sheet_names"] = None
                 st.session_state["excel_file_bytes"] = None
                 st.session_state["local_excel_path"] = None
@@ -586,6 +603,9 @@ if page == ":material/home: Data & Upload":
                 use_container_width=True,
             ):
                 try:
+
+                    st.session_state["validation_reports"] = []
+                    
                     excel_file = pd.ExcelFile(
                         selected_local_file,
                         engine="openpyxl",
@@ -667,6 +687,8 @@ if page == ":material/home: Data & Upload":
                 combined_frames = []
                 all_ok = True
 
+                st.session_state["validation_reports"] = []
+
                 with st.spinner("Reading Excel sheets..."):
                     for sheet_name in selected_sheets:
                         try:
@@ -706,9 +728,15 @@ if page == ":material/home: Data & Upload":
                                 .str.strip()
                             )
 
-                            is_valid, report = validate_data(
-                                sheet_df
-                            )
+                            # Validate this sheet
+                            is_valid, report = validate_data(sheet_df)
+
+                            # Save the report so it remains after st.rerun()
+                            st.session_state["validation_reports"].append({
+                                "source": f"{source_name} → {sheet_name}",
+                                "is_valid": is_valid,
+                                "report": report,
+                            })
 
                             with st.expander(
                                 f"Validation report — {sheet_name}",
@@ -790,6 +818,27 @@ if page == ":material/home: Data & Upload":
 
                     st.rerun()
 
+    if st.session_state["validation_reports"]:
+        st.markdown("---")
+        st.markdown("### :material/fact_check: Validation Report")
+
+        for entry in st.session_state["validation_reports"]:
+            source = entry["source"]
+            is_valid = entry["is_valid"]
+            report = entry["report"]
+
+            status = (
+                ":material/check_circle: Valid"
+                if is_valid
+                else ":material/cancel: Invalid"
+            )
+
+            with st.expander(
+                f"{status} — {source}",
+                expanded=not is_valid,
+            ):
+                _show_validation_report(report)
+
     if st.session_state['df_clean'] is not None:
         st.markdown("---")
         st.markdown(
@@ -819,9 +868,25 @@ elif page == ":material/analytics: Analytics Dashboard":
     kpis = get_kpi_summary(df)
     cards = format_kpi_cards(kpis)
 
-    cols = st.columns(len(cards))
-    for col, card in zip(cols, cards):
-        col.metric(card['label'], card['value'])
+    # First row: 4 KPI cards
+    top_cards = cards[:4]
+    top_columns = st.columns(4)
+
+    for col, card in zip(top_columns, top_cards):
+        col.metric(
+            card['label'],
+            card['value']
+        )
+
+    # Second row: remaining 3 KPI cards
+    bottom_cards = cards[4:]
+    bottom_columns = st.columns(3)
+
+    for col, card in zip(bottom_columns, bottom_cards):
+        col.metric(
+            card['label'],
+            card['value']
+        )
 
     st.markdown("---")
 
@@ -1132,61 +1197,61 @@ elif page == ":material/analytics: Analytics Dashboard":
                     'Total_Revenue':    '£{:,.0f}',
                 }), width='stretch')
 
-        st.markdown("---")
-        sub_tab1, sub_tab2, sub_tab3 = st.tabs(
-            [":material/attach_money: CLV", ":material/autorenew: New vs Returning", ":material/warning: Churn Risk"])
+        # st.markdown("---")
+        # sub_tab1, sub_tab2, sub_tab3 = st.tabs(
+        #     [":material/attach_money: CLV", ":material/autorenew: New vs Returning", ":material/warning: Churn Risk"])
 
-        with sub_tab1:
-            with st.container(border=True):
-                st.markdown("#### CLV Distribution")
-                clv = get_customer_lifetime_value(df)
-                if not clv.empty:
-                    filt_col1, filt_col2 = st.columns([1, 2])
-                    with filt_col1:
-                        st.markdown(
-                            "<p class='filter-label'>Outliers Percentile Cap</p>", unsafe_allow_html=True)
-                        clv_threshold = st.slider(
-                            "Capping Percentile",
-                            min_value=80, max_value=100, value=99, step=1,
-                            key="v_clv_percentile",
-                            label_visibility="collapsed"
-                        )
-                    cap = clv['TotalRevenue'].quantile(clv_threshold / 100)
-                    filtered_clv = clv[clv['TotalRevenue'] <= cap]
-                    st.plotly_chart(plot_clv_distribution(
-                        filtered_clv), use_container_width=True)
+        # with sub_tab1:
+        #     with st.container(border=True):
+        #         st.markdown("#### CLV Distribution")
+        #         clv = get_customer_lifetime_value(df)
+        #         if not clv.empty:
+        #             filt_col1, filt_col2 = st.columns([1, 2])
+        #             with filt_col1:
+        #                 st.markdown(
+        #                     "<p class='filter-label'>Outliers Percentile Cap</p>", unsafe_allow_html=True)
+        #                 clv_threshold = st.slider(
+        #                     "Capping Percentile",
+        #                     min_value=80, max_value=100, value=99, step=1,
+        #                     key="v_clv_percentile",
+        #                     label_visibility="collapsed"
+        #                 )
+        #             cap = clv['TotalRevenue'].quantile(clv_threshold / 100)
+        #             filtered_clv = clv[clv['TotalRevenue'] <= cap]
+        #             st.plotly_chart(plot_clv_distribution(
+        #                 filtered_clv), use_container_width=True)
 
-                    top10_pct = clv.head(max(1, int(len(clv) * 0.1)))
-                    rev_share = top10_pct['TotalRevenue'].sum(
-                    ) / clv['TotalRevenue'].sum() * 100
-                    st.info(
-                        f"Top 10% of customers generate **{rev_share:.1f}%** of total revenue")
-                else:
-                    st.plotly_chart(plot_clv_distribution(clv),
-                                    use_container_width=True)
-                with st.expander("Full CLV table"):
-                    st.dataframe(clv.head(100), width='stretch')
+        #             top10_pct = clv.head(max(1, int(len(clv) * 0.1)))
+        #             rev_share = top10_pct['TotalRevenue'].sum(
+        #             ) / clv['TotalRevenue'].sum() * 100
+        #             st.info(
+        #                 f"Top 10% of customers generate **{rev_share:.1f}%** of total revenue")
+        #         else:
+        #             st.plotly_chart(plot_clv_distribution(clv),
+        #                             use_container_width=True)
+        #         with st.expander("Full CLV table"):
+        #             st.dataframe(clv.head(100), width='stretch')
 
-        with sub_tab2:
-            with st.container(border=True):
-                new_ret = get_new_vs_returning_customers(df)
-                st.plotly_chart(plot_new_vs_returning(
-                    new_ret), use_container_width=True)
+        # with sub_tab2:
+        #     with st.container(border=True):
+        #         new_ret = get_new_vs_returning_customers(df)
+        #         st.plotly_chart(plot_new_vs_returning(
+        #             new_ret), use_container_width=True)
 
-        with sub_tab3:
-            days = st.slider("Inactive for more than (days)",
-                             30, 180, 90, step=15)
-            churned = get_churned_customers(df, days_threshold=days)
-            st.metric(f"Customers inactive {days}+ days", f"{len(churned):,}")
-            if not churned.empty:
-                st.dataframe(churned.head(50), width='stretch')
-                csv_export = churned.to_csv(index=False).encode()
-                st.download_button(
-                    ":material/download: Download churn list (CSV)",
-                    data=csv_export,
-                    file_name=f"churn_risk_{days}days.csv",
-                    mime="text/csv",
-                )
+        # with sub_tab3:
+        #     days = st.slider("Inactive for more than (days)",
+        #                      30, 180, 90, step=15)
+        #     churned = get_churned_customers(df, days_threshold=days)
+        #     st.metric(f"Customers inactive {days}+ days", f"{len(churned):,}")
+        #     if not churned.empty:
+        #         st.dataframe(churned.head(50), width='stretch')
+        #         csv_export = churned.to_csv(index=False).encode()
+        #         st.download_button(
+        #             ":material/download: Download churn list (CSV)",
+        #             data=csv_export,
+        #             file_name=f"churn_risk_{days}days.csv",
+        #             mime="text/csv",
+        #         )
 
     with tab5:
         geo_full = get_country_performance(df)
