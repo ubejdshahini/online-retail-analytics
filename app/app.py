@@ -605,7 +605,7 @@ if page == ":material/home: Data & Upload":
                 try:
 
                     st.session_state["validation_reports"] = []
-                    
+
                     excel_file = pd.ExcelFile(
                         selected_local_file,
                         engine="openpyxl",
@@ -896,117 +896,311 @@ elif page == ":material/analytics: Analytics Dashboard":
     ])
 
     with tab1:
+
+        # SHARED FILTERS FOR TAB 1
+        df_t1 = df.copy()
+
+        df_t1["InvoiceDate"] = pd.to_datetime(
+            df_t1["InvoiceDate"],
+            errors="coerce"
+        )
+
+        df_t1 = df_t1.dropna(subset=["InvoiceDate"])
+
+        min_date = df_t1["InvoiceDate"].min().date()
+        max_date = df_t1["InvoiceDate"].max().date()
+
+        with st.container(border=True):
+            st.markdown("### Revenue Trend Filters")
+
+            filter_col1, filter_col2 = st.columns(2)
+
+            with filter_col1:
+                st.markdown(
+                    "<p class='filter-label'>Date Range</p>",
+                    unsafe_allow_html=True
+                )
+
+                selected_range = st.date_input(
+                    "Date Range",
+                    value=(min_date, max_date),
+                    min_value=min_date,
+                    max_value=max_date,
+                    key="tab1_shared_date_range",
+                    label_visibility="collapsed"
+                )
+
+            with filter_col2:
+                st.markdown(
+                    "<p class='filter-label'>Country</p>",
+                    unsafe_allow_html=True
+                )
+
+                selected_country = st.selectbox(
+                    "Country",
+                    options=[
+                        "All Countries"
+                    ] + sorted(
+                        df_t1["Country"]
+                        .dropna()
+                        .astype(str)
+                        .unique()
+                        .tolist()
+                    ),
+                    key="tab1_shared_country",
+                    label_visibility="collapsed"
+                )
+
+        if (
+            isinstance(selected_range, (list, tuple))
+            and len(selected_range) == 2
+        ):
+            df_t1 = df_t1[
+                (
+                    df_t1["InvoiceDate"].dt.date
+                    >= selected_range[0]
+                )
+                &
+                (
+                    df_t1["InvoiceDate"].dt.date
+                    <= selected_range[1]
+                )
+            ]
+
+        if selected_country != "All Countries":
+            df_t1 = df_t1[
+                df_t1["Country"].astype(str)
+                == selected_country
+            ]
+
+        if df_t1.empty:
+            st.warning("No data is available for the selected filters.")
+            st.stop()
+
+        st.markdown("---")
         # 1. Monthly Revenue & Order Volume
         with st.container(border=True):
             st.markdown("### Monthly Revenue & Order Volume")
 
-            df_t1_m = df.copy()
-            if 'InvoiceDate' in df.columns:
-                t1_dates = pd.to_datetime(df['InvoiceDate'])
-                t1_min, t1_max = t1_dates.min().date(), t1_dates.max().date()
+            monthly = get_monthly_revenue(df_t1)
 
-                filt_col1, filt_col2 = st.columns([1, 3])
-                with filt_col1:
-                    st.markdown(
-                        "<p class='filter-label'>Date Range</p>", unsafe_allow_html=True)
-                    t1_range = st.date_input(
-                        "Date Range",
-                        value=(t1_min, t1_max),
-                        min_value=t1_min, max_value=t1_max,
-                        key="v_t1_dates",
-                        label_visibility="collapsed"
-                    )
-                if isinstance(t1_range, (list, tuple)) and len(t1_range) == 2:
-                    df_t1_m = df_t1_m[(t1_dates.dt.date >= t1_range[0]) & (
-                        t1_dates.dt.date <= t1_range[1])]
-
-            if df_t1_m.empty:
-                st.warning("No data available for the selected date range.")
+            if monthly.empty:
+                st.warning("No monthly revenue data is available.")
             else:
-                monthly = get_monthly_revenue(df_t1_m)
-                st.plotly_chart(plot_monthly_revenue(
-                    monthly), use_container_width=True)
+                st.plotly_chart(
+                    plot_monthly_revenue(monthly),
+                    use_container_width=True,
+                )
 
         st.markdown("---")
 
         # 2. Monthly Revenue Patterns by Product
         with st.container(border=True):
             st.markdown("### Monthly Revenue Patterns by Product")
-            filt_col1, filt_col2 = st.columns([1, 3])
-            with filt_col1:
-                st.markdown(
-                    "<p class='filter-label'>Compare Products Count</p>", unsafe_allow_html=True)
-                product_count = st.slider(
-                    "Products count",
-                    min_value=3, max_value=10, value=4,
-                    key="monthly_product_count",
-                    label_visibility="collapsed"
+
+            available_products = sorted(
+                df_t1["Description"]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+
+            top_3_products = (
+                df_t1
+                .dropna(subset=["Description"])
+                .groupby("Description", observed=True)["Revenue"]
+                .sum()
+                .nlargest(3)
+                .index
+                .astype(str)
+                .tolist()
+            )
+
+            # Streamlit multiselect is searchable by typing.
+            selected_products = st.multiselect(
+                "Search and select products",
+                options=available_products,
+                default=top_3_products,
+                key="monthly_selected_products",
+                placeholder="Type a product name...",
+                help="The top 3 revenue-generating products are selected automatically.",
+            )
+
+            if not selected_products:
+                st.info(
+                    "Search for and select at least one product "
+                    "to display its monthly revenue."
                 )
-            monthly_products = get_monthly_product_revenue(df, n=product_count)
-            if monthly_products.empty:
-                st.warning("No product data available.")
             else:
-                st.plotly_chart(plot_monthly_product_revenue(
-                    monthly_products), use_container_width=True)
+                product_df = df_t1[
+                    df_t1["Description"].astype(str).isin(
+                        selected_products
+                    )
+                ]
+
+                # The function now receives only the selected products,
+                # so it no longer chooses an automatic Top N range.
+                monthly_products = get_monthly_product_revenue(
+                    product_df,
+                    n=len(selected_products),
+                )
+
+                if monthly_products.empty:
+                    st.warning(
+                        "No product data is available for this selection."
+                    )
+                else:
+                    st.plotly_chart(
+                        plot_monthly_product_revenue(monthly_products),
+                        use_container_width=True,
+                    )
 
         st.markdown("---")
 
         c1, c2 = st.columns(2)
+
+        # Prepare reusable dates and weeks from the globally filtered data.
+        period_df = df_t1.copy()
+        period_df["_Date"] = period_df["InvoiceDate"].dt.date
+        period_df["_WeekStart"] = (
+            period_df["InvoiceDate"]
+            - pd.to_timedelta(
+                period_df["InvoiceDate"].dt.weekday,
+                unit="D"
+            )
+        ).dt.date
+
+        week_starts = sorted(period_df["_WeekStart"].unique())
+        week_labels = {
+            f"Week of {week_start:%d %b %Y}": week_start
+            for week_start in week_starts
+        }
+
         with c1:
             with st.container(border=True):
                 st.markdown("### Revenue by Day of Week")
-                df_t1_dow = df.copy()
-                if 'Country' in df.columns:
-                    filt_col1, filt_col2 = st.columns([1.5, 2])
-                    with filt_col1:
-                        st.markdown(
-                            "<p class='filter-label'>Country</p>", unsafe_allow_html=True)
-                        t1_dow_country = st.selectbox(
-                            "Country",
-                            options=["All Countries"] +
-                                sorted(
-                                    df['Country'].dropna().unique().tolist()),
-                            key="v_t1_dow_country",
-                            label_visibility="collapsed"
-                        )
-                    if t1_dow_country != "All Countries":
-                        df_t1_dow = df_t1_dow[df_t1_dow['Country']
-                            == t1_dow_country]
 
-                if df_t1_dow.empty:
-                    st.warning("No data available for this country selection.")
+                selected_week_label = st.selectbox(
+                    "Week",
+                    options=["Average across selected range"]
+                    + list(week_labels.keys()),
+                    key="revenue_week_selection",
+                )
+
+                if selected_week_label == "Average across selected range":
+                    # First calculate each weekday's revenue inside each week,
+                    # then average that weekday across all selected weeks.
+                    weekly_day_revenue = (
+                        period_df.assign(
+                            DayOfWeek=period_df[
+                                "InvoiceDate"
+                            ].dt.day_name()
+                        )
+                        .groupby(
+                            ["_WeekStart", "DayOfWeek"],
+                            observed=True,
+                        )["Revenue"]
+                        .sum()
+                        .reset_index()
+                    )
+
+                    dow = (
+                        weekly_day_revenue
+                        .groupby("DayOfWeek", observed=True)["Revenue"]
+                        .mean()
+                        .reset_index()
+                    )
+
+                    day_order = [
+                        "Monday", "Tuesday", "Wednesday",
+                        "Thursday", "Friday", "Saturday", "Sunday",
+                    ]
+                    dow["DayOfWeek"] = pd.Categorical(
+                        dow["DayOfWeek"],
+                        categories=day_order,
+                        ordered=True,
+                    )
+                    dow = dow.sort_values("DayOfWeek")
                 else:
-                    dow = get_revenue_by_day_of_week(df_t1_dow)
-                    st.plotly_chart(plot_revenue_by_day_of_week(
-                        dow), use_container_width=True)
+                    selected_week = week_labels[selected_week_label]
+                    week_df = period_df[
+                        period_df["_WeekStart"] == selected_week
+                    ]
+                    dow = get_revenue_by_day_of_week(week_df)
+
+                if dow.empty:
+                    st.warning("No weekday revenue data is available.")
+                else:
+
+                    st.plotly_chart(
+                        plot_revenue_by_day_of_week(dow),
+                        use_container_width=True,
+                    )
 
         with c2:
             with st.container(border=True):
                 st.markdown("### Sales Activity by Hour of Day")
-                df_t1_hour = df.copy()
-                if 'Country' in df.columns:
-                    filt_col1, filt_col2 = st.columns([1.5, 2])
-                    with filt_col1:
-                        st.markdown(
-                            "<p class='filter-label'>Country</p>", unsafe_allow_html=True)
-                        t1_hour_country = st.selectbox(
-                            "Country",
-                            options=["All Countries"] +
-                                sorted(
-                                    df['Country'].dropna().unique().tolist()),
-                            key="v_t1_hour_country",
-                            label_visibility="collapsed"
-                        )
-                    if t1_hour_country != "All Countries":
-                        df_t1_hour = df_t1_hour[df_t1_hour['Country']
-                            == t1_hour_country]
 
-                if df_t1_hour.empty:
-                    st.warning("No data available for this country selection.")
+                available_days = sorted(period_df["_Date"].unique())
+                day_labels = {
+                    pd.Timestamp(day).strftime("%d %b %Y"): day
+                    for day in available_days
+                }
+
+                selected_day_label = st.selectbox(
+                    "Day",
+                    options=["Average across selected range"]
+                    + list(day_labels.keys()),
+                    key="hour_day_selection",
+                )
+
+                if selected_day_label == "Average across selected range":
+                    # Calculate revenue per hour for every date, then average
+                    # the same hour across all dates in the selected range.
+                    daily_hour_data = (
+                        period_df.assign(
+                            Hour=period_df["InvoiceDate"].dt.hour
+                        )
+                        .groupby(
+                            ["_Date", "Hour"],
+                            observed=True
+                        )
+                        .agg(
+                            Revenue=("Revenue", "sum"),
+                            Transactions=("Invoice", "nunique")
+                        )
+                        .reset_index()
+                    )
+
+                    hourly = (
+                        daily_hour_data
+                        .groupby(
+                            "Hour",
+                            observed=True
+                        )
+                        .agg(
+                            Revenue=("Revenue", "mean"),
+                            Transactions=("Transactions", "mean")
+                        )
+                        .reset_index()
+                    )
                 else:
-                    hourly = get_revenue_by_hour(df_t1_hour)
-                    st.plotly_chart(plot_revenue_by_hour(
-                        hourly), use_container_width=True)
+                    selected_day = day_labels[selected_day_label]
+                    day_df = period_df[
+                        period_df["_Date"] == selected_day
+                    ]
+                    hourly = get_revenue_by_hour(day_df)
+
+                if hourly.empty:
+                    st.warning("No hourly sales data is available.")
+                else:
+                    st.plotly_chart(
+                        plot_revenue_by_hour(hourly),
+                        use_container_width=True,
+                    )
+
+
 
     with tab2:
         c1, c2 = st.columns(2)
