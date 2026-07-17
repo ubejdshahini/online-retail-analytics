@@ -581,76 +581,13 @@ if page == ":material/home: Data & Upload":
                 if uploaded.name.lower().endswith(".xlsx"):
                     st.session_state["excel_source"] = "uploaded"
 
-        st.markdown("---")
-
         # ---------------------------------------------------------
-        # 2. Local Excel file
-        # ---------------------------------------------------------
-        st.markdown("### Load Excel File From Project")
-
-        local_excel_files = sorted(DATA_DIR.glob("*.xlsx"))
-
-        if local_excel_files:
-            selected_local_file = st.selectbox(
-                "Choose local Excel file",
-                options=local_excel_files,
-                format_func=lambda path: path.name,
-                key="local_excel_selector",
-            )
-
-            if st.button(
-                "Open Local Excel File",
-                key="btn_open_local_excel",
-                use_container_width=True,
-            ):
-                try:
-
-                    st.session_state["validation_reports"] = []
-
-                    excel_file = pd.ExcelFile(
-                        selected_local_file,
-                        engine="openpyxl",
-                    )
-
-                    st.session_state["local_excel_path"] = str(
-                        selected_local_file
-                    )
-                    st.session_state["sheet_names"] = excel_file.sheet_names
-                    st.session_state["excel_source"] = "local"
-                    st.session_state["excel_file_bytes"] = None
-                    st.session_state["last_uploaded_file"] = None
-                    st.session_state["sheet_mode"] = None
-                    st.session_state["selected_sheet"] = None
-
-                    st.success(
-                        f"Opened **{selected_local_file.name}** successfully."
-                    )
-
-                    st.rerun()
-
-                except Exception as e:
-                    st.error(
-                        f"Could not open local Excel file: {e}"
-                    )
-        else:
-            st.info(
-                f"No `.xlsx` files found inside `{DATA_DIR}`."
-            )
-
-        # ---------------------------------------------------------
-        # 3. Excel sheet selector
+        # 2. Excel sheet selector
         # Works for BOTH uploaded and local files
         # ---------------------------------------------------------
         if st.session_state.get("sheet_names"):
             sheet_names = st.session_state["sheet_names"]
-            excel_source = st.session_state.get("excel_source")
-
-            if excel_source == "local":
-                source_name = Path(
-                    st.session_state["local_excel_path"]
-                ).name
-            else:
-                source_name = uploaded.name if uploaded else "Uploaded Excel file"
+            source_name = uploaded.name if uploaded else "Uploaded Excel file"
 
             st.markdown("---")
             st.markdown(
@@ -693,32 +630,22 @@ if page == ":material/home: Data & Upload":
                 with st.spinner("Reading Excel sheets..."):
                     for sheet_name in selected_sheets:
                         try:
-                            # Read from local project file
-                            if excel_source == "local":
-                                sheet_df = pd.read_excel(
-                                    st.session_state["local_excel_path"],
-                                    sheet_name=sheet_name,
-                                    engine="openpyxl",
-                                )
+                            excel_bytes = st.session_state.get(
+                                "excel_file_bytes"
+                            )
 
-                            # Read from browser-uploaded file bytes
-                            else:
-                                excel_bytes = st.session_state.get(
-                                    "excel_file_bytes"
+                            if not excel_bytes:
+                                st.error(
+                                    "Uploaded Excel data is no longer available."
                                 )
+                                all_ok = False
+                                break
 
-                                if not excel_bytes:
-                                    st.error(
-                                        "Uploaded Excel data is no longer available."
-                                    )
-                                    all_ok = False
-                                    break
-
-                                sheet_df = pd.read_excel(
-                                    BytesIO(excel_bytes),
-                                    sheet_name=sheet_name,
-                                    engine="openpyxl",
-                                )
+                            sheet_df = pd.read_excel(
+                                BytesIO(excel_bytes),
+                                sheet_name=sheet_name,
+                                engine="openpyxl",
+                            )
 
                             sheet_df = sheet_df.copy()
 
