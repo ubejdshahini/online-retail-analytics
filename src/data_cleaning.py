@@ -61,4 +61,31 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     if 'Quantity' in df_clean.columns and 'UnitPrice' in df_clean.columns:
         df_clean['Revenue'] = df_clean['Quantity'] * df_clean['UnitPrice']
 
+    # 8. Normalise country names so they match the GeoJSON feature names used
+    #    by the choropleth map.  Leading/trailing whitespace is stripped first,
+    #    then known aliases (abbreviations, old names, dataset quirks) are
+    #    mapped to their canonical GeoJSON form.
+    if 'Country' in df_clean.columns:
+        df_clean['Country'] = df_clean['Country'].astype(str).str.strip()
+        _COUNTRY_ALIASES = {
+            # Kosovo variants
+            'Republic of Kosovo':       'Kosovo',
+            'Republika e Kosovës':      'Kosovo',
+            'Косово':                   'Kosovo',
+            # Retail dataset abbreviations / informal names
+            'EIRE':                     'Ireland',
+            'USA':                      'United States of America',
+            'RSA':                      'South Africa',
+            'Korea':                    'South Korea',
+            'Hong Kong':                'China',        # no separate polygon in GeoJSON
+            'Singapore':                'Malaysia',     # island; closest land polygon
+            'Bahrain':                  'Saudi Arabia', # island; closest land polygon
+            'Channel Islands':          'United Kingdom',
+            'European Community':       None,           # no matching polygon — drop below
+            'Unspecified':              None,
+        }
+        df_clean['Country'] = df_clean['Country'].replace(_COUNTRY_ALIASES)
+        # Drop rows whose country could not be mapped to a map polygon
+        df_clean = df_clean.dropna(subset=['Country'])
+
     return df_clean

@@ -6,6 +6,8 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
+import json
+import os
 from plotly.subplots import make_subplots
 from src.theme import CHART_COLORS, THEME
 
@@ -218,6 +220,7 @@ def plot_rfm_segments(seg_summary: pd.DataFrame) -> go.Figure:
     if seg_summary.empty:
         return go.Figure()
 
+<<<<<<< Updated upstream
     fig = go.Figure()
     for i, row in seg_summary.iterrows():
         fig.add_trace(go.Scatter(
@@ -227,10 +230,28 @@ def plot_rfm_segments(seg_summary: pd.DataFrame) -> go.Figure:
             name=row['Segment'],
             text=[row['Segment']],
             textposition='top center',
+=======
+    max_customers = max(float(seg_summary['Customers'].max()), 1)
+
+    fig = go.Figure()
+    for index, (_, row) in enumerate(seg_summary.iterrows()):
+        # Plotly treats scalar marker sizes as pixels, so calculate a bounded
+        # diameter directly. Square-root scaling preserves area proportionality
+        # without allowing a large segment to cover the chart.
+        bubble_size = 16 + np.sqrt(row['Customers'] / max_customers) * 44
+        segment_name = row['Segment']
+        fig.add_trace(go.Scatter(
+            x=[row['Avg_Recency_Days']],
+            y=[row['Avg_Revenue']],
+            mode='markers',
+            name=segment_name,
+            cliponaxis=False,
+>>>>>>> Stashed changes
             marker=dict(
                 size=max(row['Customers'] / seg_summary['Customers'].max() * 80, 12),
                 color=PALETTE[i % len(PALETTE)],
                 opacity=0.85,
+<<<<<<< Updated upstream
                 line=dict(width=1, color=COLORS['background']),
             ),
         ))
@@ -238,6 +259,51 @@ def plot_rfm_segments(seg_summary: pd.DataFrame) -> go.Figure:
     fig.update_yaxes(title_text='Avg Revenue per Customer (£)')
     fig.update_layout(showlegend=False)
     return _apply_base(fig, 'Customer Segments — Recency vs Revenue\n(bubble size = # customers)')
+=======
+                line=dict(width=1.5, color=COLORS['background']),
+            ),
+            customdata=[[
+                row['Customers'],
+                row['Avg_Frequency'],
+                row['Total_Revenue'],
+            ]],
+            hovertemplate=(
+                f'<b>{segment_name}</b><br>'
+                'Customers: %{customdata[0]:,.0f}<br>'
+                'Avg recency: %{x:,.0f} days<br>'
+                'Avg frequency: %{customdata[1]:,.1f} orders<br>'
+                'Avg revenue: £%{y:,.0f}<br>'
+                'Total revenue: £%{customdata[2]:,.0f}<extra></extra>'
+            ),
+        ))
+    fig = _apply_base(
+        fig,
+        'Customer Segments<br><sup>Recency vs Revenue · bubble size = no. of customers</sup>',
+    )
+    fig.update_xaxes(
+        title_text='Avg Days Since Last Purchase (Recency ↑ = worse)',
+        automargin=True,
+    )
+    fig.update_yaxes(
+        title_text='Avg Revenue per Customer (£)',
+        automargin=True,
+        rangemode='tozero',
+    )
+    fig.update_layout(
+        showlegend=True,
+        legend=dict(
+            title=dict(text='Segments', font=dict(size=12)),
+            orientation='h',
+            yanchor='bottom',
+            y=-0.35,
+            xanchor='center',
+            x=0.5,
+        ),
+        height=560,
+        margin=dict(l=75, r=65, t=90, b=110),
+    )
+    return fig
+>>>>>>> Stashed changes
 
 
 def plot_segment_revenue_share(seg_summary: pd.DataFrame) -> go.Figure:
@@ -314,16 +380,34 @@ def plot_country_revenue(geo_df: pd.DataFrame, exclude_uk: bool = True) -> go.Fi
     if exclude_uk:
         df = df[df['Country'] != 'United Kingdom']
 
-    fig = px.choropleth(
-        df,
-        locations='Country',
-        locationmode='country names',
-        color='Revenue',
-        color_continuous_scale=[[i / (len(PALETTE) - 1), color]
-                                for i, color in enumerate(PALETTE)],
-        hover_data={'Revenue': ':,.0f'},
-        labels={'Revenue': 'Revenue (£)'},
-    )
+    geojson_path = os.path.join('data', 'world.geo.json')
+    if os.path.exists(geojson_path):
+        with open(geojson_path, 'r', encoding='utf-8') as f:
+            world_geojson = json.load(f)
+        fig = px.choropleth(
+            df,
+            geojson=world_geojson,
+            locations='Country',
+            featureidkey='properties.name',
+            color='Revenue',
+            color_continuous_scale=[[i / (len(PALETTE) - 1), color]
+                                    for i, color in enumerate(PALETTE)],
+            hover_data={'Revenue': ':,.0f'},
+            labels={'Revenue': 'Revenue (£)'},
+        )
+        fig.update_geos(fitbounds="locations", visible=False)
+    else:
+        fig = px.choropleth(
+            df,
+            locations='Country',
+            locationmode='country names',
+            color='Revenue',
+            color_continuous_scale=[[i / (len(PALETTE) - 1), color]
+                                    for i, color in enumerate(PALETTE)],
+            hover_data={'Revenue': ':,.0f'},
+            labels={'Revenue': 'Revenue (£)'},
+        )
+        
     fig.update_layout(
         geo=dict(
             bgcolor=COLORS['background'],
