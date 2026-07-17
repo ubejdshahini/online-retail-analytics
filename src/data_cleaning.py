@@ -11,6 +11,12 @@ _REQUIRED_COLUMNS = ['Invoice', 'StockCode', 'Description', 'Quantity', 'Invoice
 _PRICE_ALIASES    = ['Price', 'UnitPrice']
 _CUSTOMER_ALIASES = ['Customer ID', 'CustomerID']
 
+_NON_PRODUCT_STOCK_CODES = {
+    "POST",
+    "DOT",
+    "M",
+    "BANK CHARGES",
+}
 
 def validate_data(df: pd.DataFrame) -> tuple[bool, dict]:
     """
@@ -30,8 +36,7 @@ def validate_data(df: pd.DataFrame) -> tuple[bool, dict]:
     -------
     (is_valid, report) where:
         is_valid : bool  — False if any *blocking* issue is found
-        report   : dict  — keys: 'errors' (list[str]), 'warnings' (list[str]),
-                                 'info'   (list[str])
+        report   : dict  — keys: 'errors' (list[str]), 'warnings'(list[str]), 'info'   (list[str])
     """
     errors   = []
     warnings = []
@@ -97,11 +102,69 @@ def validate_data(df: pd.DataFrame) -> tuple[bool, dict]:
         if n_returns > 0:
             info.append(f"**{n_returns:,}** rows have negative Quantity — classified as returns (`IsReturn=True`)")
 
-    # ── 7. Row / column counts ────────────────────────────────────────────
+    # ── 7. Non-product StockCodes ───────────────────────────────────────
+    if 'StockCode' in cols:
+        stock_codes = (
+            df['StockCode']
+            .fillna('')
+            .astype(str)
+            .str.strip()
+            .str.upper()
+        )
+
+        non_product_mask = stock_codes.isin(
+            _NON_PRODUCT_STOCK_CODES
+        )
+
+        n_non_products = non_product_mask.sum()
+
+        if n_non_products > 0:
+            found_codes = sorted(
+                stock_codes[non_product_mask].unique()
+            )
+
+            info.append(
+                f"**{n_non_products:,}** rows contain non-product "
+                f"StockCodes ({', '.join(found_codes)}). "
+                "They will remain in the dataset but will be excluded "
+                "from product-specific analysis."
+            )
+
+    # ── 8. Row / column counts ────────────────────────────────────────────
     info.append(f"Dataset shape: **{len(df):,} rows × {df.shape[1]} columns**")
 
     is_valid = len(errors) == 0
     return is_valid, {'errors': errors, 'warnings': warnings, 'info': info}
+
+
+def add_product_flag(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Standardize StockCode and classify rows as products
+    or non-product fees/adjustments.
+
+    Non-product rows remain in the dataset.
+    """
+    result = df.copy()
+
+    if 'StockCode' not in result.columns:
+        result['IsProduct'] = True
+        return result
+
+    result['StockCode'] = (
+        result['StockCode']
+        .fillna('')
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    result['IsProduct'] = ~result['StockCode'].isin(
+        _NON_PRODUCT_STOCK_CODES
+    )
+
+    return result
+
+
 
 
 def clean_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -109,54 +172,106 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     Cleans the "Online Retail II" dataset.
 
     Steps applied:
-    - Handle missing CustomerID (mark as "Guest").
-    - Classify negative Quantity as returns/refunds (IsReturn column).
+    - Standardize CustomerID.
+    - Standardize StockCode.
+    - Classify postage, fees, and adjustments using IsProduct.
+    - Remove duplicate rows.
+    - Classify negative Quantity as returns.
     - Filter out UnitPrice <= 0.
     - Convert InvoiceDate to datetime.
-    - Create Revenue column = Quantity * UnitPrice.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Raw dataset.
-
-    Returns
-    -------
-    pd.DataFrame
-        Cleaned dataset.
+    - Create Revenue = Quantity * UnitPrice.
     """
     df_clean = df.copy()
 
-    # 1. Handle missing CustomerID — mark as "Guest"
+    # 1. Standardize CustomerID column
     if 'Customer ID' in df_clean.columns:
-        df_clean.rename(columns={'Customer ID': 'CustomerID'}, inplace=True)
+        df_clean.rename(
+            columns={'Customer ID': 'CustomerID'},
+            inplace=True
+        )
+
     if 'CustomerID' in df_clean.columns:
-        # Keep the whole column on one Arrow-compatible type. Mixing numeric
-        # IDs with the string "Guest" makes Streamlit repeatedly log a
-        # dataframe serialization warning.
-        df_clean['CustomerID'] = df_clean['CustomerID'].fillna('Guest').astype(str)
+        df_clean['CustomerID'] = (
+            df_clean['CustomerID']
+            .fillna('Guest')
+            .astype(str)
+            .str.strip()
+        )
 
-    # 2. Normalise column name: 'Price' (UCI raw format) → 'UnitPrice'
-    if 'Price' in df_clean.columns and 'UnitPrice' not in df_clean.columns:
-        df_clean.rename(columns={'Price': 'UnitPrice'}, inplace=True)
+        # Excel sometimes turns IDs into values such as "12345.0"
+        df_clean['CustomerID'] = (
+            df_clean['CustomerID']
+            .str.replace(r'\.0$', '', regex=True)
+        )
 
-    # 3. Remove duplicate rows
+        df_clean['CustomerID'] = (
+            df_clean['CustomerID']
+            .replace('', 'Guest')
+        )
+
+    # 2. Rename Price to UnitPrice
+    if (
+        'Price' in df_clean.columns
+        and 'UnitPrice' not in df_clean.columns
+    ):
+        df_clean.rename(
+            columns={'Price': 'UnitPrice'},
+            inplace=True
+        )
+
+    # 3. Standardize StockCode and classify products
+    df_clean = add_product_flag(df_clean)
+
+    # 4. Remove duplicate rows
     df_clean = df_clean.drop_duplicates()
 
-    # 4. Classify negative Quantity as returns (do not delete)
+    # 5. Ensure Quantity is numeric
     if 'Quantity' in df_clean.columns:
-        df_clean['IsReturn'] = df_clean['Quantity'] < 0
+        df_clean['Quantity'] = pd.to_numeric(
+            df_clean['Quantity'],
+            errors='coerce'
+        )
 
-    # 5. Filter out UnitPrice <= 0
+        # Remove rows where Quantity cannot be parsed
+        df_clean = df_clean[
+            df_clean['Quantity'].notna()
+        ].copy()
+
+        # Negative Quantity represents a return
+        df_clean['IsReturn'] = (
+            df_clean['Quantity'] < 0
+        )
+
+    # 6. Ensure UnitPrice is numeric and positive
     if 'UnitPrice' in df_clean.columns:
-        df_clean = df_clean[df_clean['UnitPrice'] > 0].copy()
+        df_clean['UnitPrice'] = pd.to_numeric(
+            df_clean['UnitPrice'],
+            errors='coerce'
+        )
 
-    # 6. Convert InvoiceDate to datetime
+        df_clean = df_clean[
+            df_clean['UnitPrice'] > 0
+        ].copy()
+
+    # 7. Convert InvoiceDate safely
     if 'InvoiceDate' in df_clean.columns:
-        df_clean['InvoiceDate'] = pd.to_datetime(df_clean['InvoiceDate'])
+        df_clean['InvoiceDate'] = pd.to_datetime(
+            df_clean['InvoiceDate'],
+            errors='coerce'
+        )
 
-    # 7. Create Revenue column = Quantity * UnitPrice
-    if 'Quantity' in df_clean.columns and 'UnitPrice' in df_clean.columns:
-        df_clean['Revenue'] = df_clean['Quantity'] * df_clean['UnitPrice']
+        df_clean = df_clean[
+            df_clean['InvoiceDate'].notna()
+        ].copy()
 
-    return df_clean
+    # 8. Calculate revenue
+    if (
+        'Quantity' in df_clean.columns
+        and 'UnitPrice' in df_clean.columns
+    ):
+        df_clean['Revenue'] = (
+            df_clean['Quantity']
+            * df_clean['UnitPrice']
+        )
+
+    return df_clean.reset_index(drop=True)

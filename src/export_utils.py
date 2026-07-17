@@ -177,7 +177,14 @@ def generate_excel_report(df: pd.DataFrame, kpis: dict, recs: list[dict], projec
     ws3["A1"].font = title_font
     ws3.row_dimensions[1].height = 30
     
-    headers3 = ["Priority", "Type", "Target Segment", "Recommendation Title", "Estimated Profit Impact", "Action Plan Details"]
+    headers3 = [
+        "Priority",
+        "Type",
+        "Target Segment",
+        "Recommendation Title",
+        "Heuristic Impact Estimate",
+        "Action Plan Details"
+    ]
     ws3.append([]) # spacer
     ws3.append(headers3)
     ws3.row_dimensions[3].height = 24

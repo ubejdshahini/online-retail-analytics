@@ -6,18 +6,10 @@ import streamlit as st
 # Path setup
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.data_cleaning import clean_data, validate_data
-from src.analysis import (
-    get_kpi_summary, get_monthly_revenue, get_monthly_product_revenue,
-    get_revenue_by_hour,
-    get_revenue_by_day_of_week, get_top_products, get_worst_products,
-    get_product_return_rate, get_country_performance,
-    get_customer_lifetime_value, get_new_vs_returning_customers,
-    get_churned_customers, get_return_summary,
-    get_return_rate_over_time, get_top_returning_customers, get_returns_revenue_impact,
-)
-from src.recommendation_engine import compute_rfm, get_segment_summary, generate_recommendations
-from src.export_utils import generate_excel_report
+
+
+from src.about_page import render_about_page
+from src.theme import css_variables
 from src.visualisations import (
     plot_monthly_revenue, plot_monthly_product_revenue,
     plot_revenue_by_hour, plot_revenue_by_day_of_week,
@@ -27,8 +19,19 @@ from src.visualisations import (
     format_kpi_cards,
     plot_return_rate_over_time, plot_top_returning_customers, plot_returns_revenue_impact,
 )
-from src.theme import css_variables
-from src.about_page import render_about_page
+from src.export_utils import generate_excel_report
+from src.recommendation_engine import compute_rfm, get_segment_summary, generate_recommendations
+from src.analysis import (
+    get_kpi_summary, get_monthly_revenue, get_monthly_product_revenue,
+    get_revenue_by_hour,
+    get_revenue_by_day_of_week, get_top_products, get_worst_products,
+    get_product_return_rate, get_country_performance,
+    get_customer_lifetime_value, get_new_vs_returning_customers,
+    get_churned_customers, get_return_summary,
+    get_return_rate_over_time, get_top_returning_customers, get_returns_revenue_impact,
+)
+from src.data_cleaning import clean_data, validate_data, add_product_flag
+
 
 # Required columns for validation
 REQUIRED_COLUMNS = {'Invoice', 'StockCode', 'Description',
@@ -81,18 +84,18 @@ ui-label, p, label, [data-testid="stCaptionContainer"] { color: var(--color-text
     transition: transform 0.2s ease;
 }
 [data-testid="metric-container"]:hover { transform: translateY(-2px); }
-[data-testid="stMetricValue"], [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] p { 
+[data-testid="stMetricValue"], [data-testid="stMetricValue"] > div, [data-testid="stMetricValue"] p {
     color: var(--color-accent) !important;
-    font-size: 1.8rem !important; 
+    font-size: 1.8rem !important;
     word-break: break-word !important;
     overflow-wrap: break-word !important;
     white-space: normal !important;
     text-overflow: unset !important;
     overflow: visible !important;
 }
-[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] > div, [data-testid="stMetricLabel"] p { 
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] > div, [data-testid="stMetricLabel"] p {
     color: var(--color-text-secondary) !important;
-    font-size: 0.85rem !important; 
+    font-size: 0.85rem !important;
     word-break: break-word !important;
     overflow-wrap: break-word !important;
     white-space: normal !important;
@@ -249,7 +252,6 @@ if st.session_state["df_clean"] is not None:
         )
 
 
-
 # SIDEBAR
 
 with st.sidebar:
@@ -291,9 +293,16 @@ def _show_validation_report(report: dict) -> None:
         st.info(f":material/info: {msg}")
 
 
-def is_already_cleaned(df: pd.DataFrame) -> bool:
-    return 'Revenue' in df.columns and 'CustomerID' in df.columns and 'IsReturn' in df.columns
+def is_already_cleaned(
+    df: pd.DataFrame
+) -> bool:
+    required = {
+        'Revenue',
+        'CustomerID',
+        'IsReturn',
+    }
 
+    return required.issubset(df.columns)
 
 def _process_single_df(
     df_raw: pd.DataFrame,
@@ -361,11 +370,8 @@ def _process_single_df(
             .astype(str)
         )
 
-        df_raw["StockCode"] = (
-            df_raw["StockCode"]
-            .fillna("")
-            .astype(str)
-        )
+        # Add or recalculate IsProduct for older cleaned files
+        df_raw = add_product_flag(df_raw)
 
         return df_raw
 
@@ -412,6 +418,7 @@ def _process_single_df(
 
     return df_clean
 
+
 def prepare_excel_sheets(
     uploaded_file,
     sheets: dict[str, pd.DataFrame],
@@ -447,6 +454,7 @@ def prepare_excel_sheets(
         df_raw,
         f"{uploaded_file.name} → {sheet_name}",
     )
+
 
 def load_and_clean(uploaded_file) -> pd.DataFrame | None:
     """Load CSV directly or prepare Excel sheet selection."""
@@ -500,6 +508,7 @@ def load_and_clean(uploaded_file) -> pd.DataFrame | None:
     st.error(f"Unsupported file type: {uploaded_file.name}")
     return None
 # PAGE: DATA & UPLOAD
+
 
 if page == ":material/home: Data & Upload":
     st.title(":material/analytics: Online Retail Analytics Platform")
@@ -750,6 +759,7 @@ if page == ":material/home: Data & Upload":
                             .fillna("Guest")
                             .astype(str)
                         )
+                        result = add_product_flag(result)
                     else:
                         with st.spinner(
                             "Cleaning Excel data..."
@@ -779,10 +789,11 @@ if page == ":material/home: Data & Upload":
                     )
 
                     st.rerun()
-    
+
     if st.session_state['df_clean'] is not None:
         st.markdown("---")
-        st.markdown(f"### :material/folder: Currently loaded: `{st.session_state['filename']}`")
+        st.markdown(
+            f"### :material/folder: Currently loaded: `{st.session_state['filename']}`")
         df = st.session_state['df_clean']
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Rows (after cleaning)", f"{len(df):,}")
@@ -791,7 +802,8 @@ if page == ":material/home: Data & Upload":
                   f"{pd.to_datetime(df['InvoiceDate']).min().strftime('%b %Y')}"
                   f" → {pd.to_datetime(df['InvoiceDate']).max().strftime('%b %Y')}"
                   if 'InvoiceDate' in df.columns else 'N/A')
-        c4.metric("Countries", str(df['Country'].nunique()) if 'Country' in df.columns else 'N/A')
+        c4.metric("Countries", str(
+            df['Country'].nunique()) if 'Country' in df.columns else 'N/A')
 
         with st.expander("Preview first 50 rows"):
             st.dataframe(df.head(50), width='stretch')
@@ -822,15 +834,16 @@ elif page == ":material/analytics: Analytics Dashboard":
         # 1. Monthly Revenue & Order Volume
         with st.container(border=True):
             st.markdown("### Monthly Revenue & Order Volume")
-            
+
             df_t1_m = df.copy()
             if 'InvoiceDate' in df.columns:
                 t1_dates = pd.to_datetime(df['InvoiceDate'])
                 t1_min, t1_max = t1_dates.min().date(), t1_dates.max().date()
-                
+
                 filt_col1, filt_col2 = st.columns([1, 3])
                 with filt_col1:
-                    st.markdown("<p class='filter-label'>Date Range</p>", unsafe_allow_html=True)
+                    st.markdown(
+                        "<p class='filter-label'>Date Range</p>", unsafe_allow_html=True)
                     t1_range = st.date_input(
                         "Date Range",
                         value=(t1_min, t1_max),
@@ -839,22 +852,25 @@ elif page == ":material/analytics: Analytics Dashboard":
                         label_visibility="collapsed"
                     )
                 if isinstance(t1_range, (list, tuple)) and len(t1_range) == 2:
-                    df_t1_m = df_t1_m[(t1_dates.dt.date >= t1_range[0]) & (t1_dates.dt.date <= t1_range[1])]
-            
+                    df_t1_m = df_t1_m[(t1_dates.dt.date >= t1_range[0]) & (
+                        t1_dates.dt.date <= t1_range[1])]
+
             if df_t1_m.empty:
                 st.warning("No data available for the selected date range.")
             else:
                 monthly = get_monthly_revenue(df_t1_m)
-                st.plotly_chart(plot_monthly_revenue(monthly), use_container_width=True)
+                st.plotly_chart(plot_monthly_revenue(
+                    monthly), use_container_width=True)
 
         st.markdown("---")
-        
+
         # 2. Monthly Revenue Patterns by Product
         with st.container(border=True):
             st.markdown("### Monthly Revenue Patterns by Product")
             filt_col1, filt_col2 = st.columns([1, 3])
             with filt_col1:
-                st.markdown("<p class='filter-label'>Compare Products Count</p>", unsafe_allow_html=True)
+                st.markdown(
+                    "<p class='filter-label'>Compare Products Count</p>", unsafe_allow_html=True)
                 product_count = st.slider(
                     "Products count",
                     min_value=3, max_value=10, value=4,
@@ -865,10 +881,11 @@ elif page == ":material/analytics: Analytics Dashboard":
             if monthly_products.empty:
                 st.warning("No product data available.")
             else:
-                st.plotly_chart(plot_monthly_product_revenue(monthly_products), use_container_width=True)
+                st.plotly_chart(plot_monthly_product_revenue(
+                    monthly_products), use_container_width=True)
 
         st.markdown("---")
-        
+
         c1, c2 = st.columns(2)
         with c1:
             with st.container(border=True):
@@ -877,21 +894,26 @@ elif page == ":material/analytics: Analytics Dashboard":
                 if 'Country' in df.columns:
                     filt_col1, filt_col2 = st.columns([1.5, 2])
                     with filt_col1:
-                        st.markdown("<p class='filter-label'>Country</p>", unsafe_allow_html=True)
+                        st.markdown(
+                            "<p class='filter-label'>Country</p>", unsafe_allow_html=True)
                         t1_dow_country = st.selectbox(
                             "Country",
-                            options=["All Countries"] + sorted(df['Country'].dropna().unique().tolist()),
+                            options=["All Countries"] +
+                                sorted(
+                                    df['Country'].dropna().unique().tolist()),
                             key="v_t1_dow_country",
                             label_visibility="collapsed"
                         )
                     if t1_dow_country != "All Countries":
-                        df_t1_dow = df_t1_dow[df_t1_dow['Country'] == t1_dow_country]
-                
+                        df_t1_dow = df_t1_dow[df_t1_dow['Country']
+                            == t1_dow_country]
+
                 if df_t1_dow.empty:
                     st.warning("No data available for this country selection.")
                 else:
                     dow = get_revenue_by_day_of_week(df_t1_dow)
-                    st.plotly_chart(plot_revenue_by_day_of_week(dow), use_container_width=True)
+                    st.plotly_chart(plot_revenue_by_day_of_week(
+                        dow), use_container_width=True)
 
         with c2:
             with st.container(border=True):
@@ -900,21 +922,26 @@ elif page == ":material/analytics: Analytics Dashboard":
                 if 'Country' in df.columns:
                     filt_col1, filt_col2 = st.columns([1.5, 2])
                     with filt_col1:
-                        st.markdown("<p class='filter-label'>Country</p>", unsafe_allow_html=True)
+                        st.markdown(
+                            "<p class='filter-label'>Country</p>", unsafe_allow_html=True)
                         t1_hour_country = st.selectbox(
                             "Country",
-                            options=["All Countries"] + sorted(df['Country'].dropna().unique().tolist()),
+                            options=["All Countries"] +
+                                sorted(
+                                    df['Country'].dropna().unique().tolist()),
                             key="v_t1_hour_country",
                             label_visibility="collapsed"
                         )
                     if t1_hour_country != "All Countries":
-                        df_t1_hour = df_t1_hour[df_t1_hour['Country'] == t1_hour_country]
-                
+                        df_t1_hour = df_t1_hour[df_t1_hour['Country']
+                            == t1_hour_country]
+
                 if df_t1_hour.empty:
                     st.warning("No data available for this country selection.")
                 else:
                     hourly = get_revenue_by_hour(df_t1_hour)
-                    st.plotly_chart(plot_revenue_by_hour(hourly), use_container_width=True)
+                    st.plotly_chart(plot_revenue_by_hour(
+                        hourly), use_container_width=True)
 
     with tab2:
         c1, c2 = st.columns(2)
@@ -922,72 +949,89 @@ elif page == ":material/analytics: Analytics Dashboard":
             with st.container(border=True):
                 st.markdown("### Top Products")
                 df_t2_top = df.copy()
-                
+
                 filt_col1, filt_col2 = st.columns([1, 1])
                 with filt_col1:
                     if 'Country' in df.columns:
-                        st.markdown("<p class='filter-label'>Country</p>", unsafe_allow_html=True)
+                        st.markdown(
+                            "<p class='filter-label'>Country</p>", unsafe_allow_html=True)
                         t2_top_country = st.selectbox(
                             "Country",
-                            options=["All Countries"] + sorted(df['Country'].dropna().unique().tolist()),
+                            options=["All Countries"] +
+                                sorted(
+                                    df['Country'].dropna().unique().tolist()),
                             key="v_t2_top_country",
                             label_visibility="collapsed"
                         )
                         if t2_top_country != "All Countries":
-                            df_t2_top = df_t2_top[df_t2_top['Country'] == t2_top_country]
+                            df_t2_top = df_t2_top[df_t2_top['Country']
+                                == t2_top_country]
                 with filt_col2:
-                    st.markdown("<p class='filter-label'>Limit Count</p>", unsafe_allow_html=True)
-                    top_n = st.slider("Select Top N Count", 5, 20, 10, key="top_n", label_visibility="collapsed")
-                
+                    st.markdown(
+                        "<p class='filter-label'>Limit Count</p>", unsafe_allow_html=True)
+                    top_n = st.slider("Select Top N Count", 5, 20,
+                                      10, key="top_n", label_visibility="collapsed")
+
                 if df_t2_top.empty:
                     st.warning("No product sales data found.")
                 else:
                     top = get_top_products(df_t2_top, n=top_n)
-                    st.plotly_chart(plot_top_products(top, n=top_n), use_container_width=True)
+                    st.plotly_chart(plot_top_products(
+                        top, n=top_n), use_container_width=True)
 
         with c2:
             with st.container(border=True):
                 st.markdown("### Worst Products")
                 df_t2_worst = df.copy()
-                
+
                 filt_col1, filt_col2 = st.columns([1.5, 2])
                 with filt_col1:
                     if 'Country' in df.columns:
-                        st.markdown("<p class='filter-label'>Country</p>", unsafe_allow_html=True)
+                        st.markdown(
+                            "<p class='filter-label'>Country</p>", unsafe_allow_html=True)
                         t2_worst_country = st.selectbox(
                             "Country",
-                            options=["All Countries"] + sorted(df['Country'].dropna().unique().tolist()),
+                            options=["All Countries"] +
+                                sorted(
+                                    df['Country'].dropna().unique().tolist()),
                             key="v_t2_worst_country",
                             label_visibility="collapsed"
                         )
                         if t2_worst_country != "All Countries":
-                            df_t2_worst = df_t2_worst[df_t2_worst['Country'] == t2_worst_country]
-                
+                            df_t2_worst = df_t2_worst[df_t2_worst['Country']
+                                == t2_worst_country]
+
                 if df_t2_worst.empty:
                     st.warning("No product sales data found.")
                 else:
                     worst = get_worst_products(df_t2_worst, n=10)
-                    st.plotly_chart(plot_top_products(worst, n=10), use_container_width=True)
-                    st.caption("Worst-selling products — consider repricing or discontinuation")
+                    st.plotly_chart(plot_top_products(
+                        worst, n=10), use_container_width=True)
+                    st.caption(
+                        "Worst-selling products — consider repricing or discontinuation")
 
     with tab3:
         ret_summary = get_return_summary(df)
         if ret_summary:
             rc1, rc2, rc3 = st.columns(3)
-            rc1.metric("Return Transactions", f"{ret_summary.get('return_transactions', 0):,}")
-            rc2.metric("Return Rate", f"{ret_summary.get('return_rate_%', 0):.1f}%")
-            rc3.metric("Revenue Lost to Returns", f"£{ret_summary.get('revenue_lost_from_returns', 0):,.0f}")
+            rc1.metric("Return Transactions",
+                       f"{ret_summary.get('return_transactions', 0):,}")
+            rc2.metric("Return Rate",
+                       f"{ret_summary.get('return_rate_%', 0):.1f}%")
+            rc3.metric("Revenue Lost to Returns",
+                       f"£{ret_summary.get('revenue_lost_from_returns', 0):,.0f}")
 
         st.markdown("---")
 
         with st.container(border=True):
             st.markdown("### Return Trends & Impact Analysis")
-            
+
             df_t3_filtered = df.copy()
             if 'InvoiceDate' in df.columns:
                 filt_col1, filt_col2 = st.columns([1, 3])
                 with filt_col1:
-                    st.markdown("<p class='filter-label'>Date Range</p>", unsafe_allow_html=True)
+                    st.markdown(
+                        "<p class='filter-label'>Date Range</p>", unsafe_allow_html=True)
                     t3_dates = pd.to_datetime(df['InvoiceDate'])
                     t3_min, t3_max = t3_dates.min().date(), t3_dates.max().date()
                     t3_range = st.date_input(
@@ -998,13 +1042,16 @@ elif page == ":material/analytics: Analytics Dashboard":
                         label_visibility="collapsed"
                     )
                 if isinstance(t3_range, (list, tuple)) and len(t3_range) == 2:
-                    df_t3_filtered = df_t3_filtered[(t3_dates.dt.date >= t3_range[0]) & (t3_dates.dt.date <= t3_range[1])]
+                    df_t3_filtered = df_t3_filtered[(t3_dates.dt.date >= t3_range[0]) & (
+                        t3_dates.dt.date <= t3_range[1])]
 
             if df_t3_filtered.empty:
                 st.warning("No return data found for the selected range.")
             else:
-                st.plotly_chart(plot_return_rate_over_time(get_return_rate_over_time(df_t3_filtered)), use_container_width=True)
-                st.plotly_chart(plot_returns_revenue_impact(get_returns_revenue_impact(df_t3_filtered)), use_container_width=True)
+                st.plotly_chart(plot_return_rate_over_time(
+                    get_return_rate_over_time(df_t3_filtered)), use_container_width=True)
+                st.plotly_chart(plot_returns_revenue_impact(
+                    get_returns_revenue_impact(df_t3_filtered)), use_container_width=True)
 
         st.markdown("---")
 
@@ -1014,28 +1061,33 @@ elif page == ":material/analytics: Analytics Dashboard":
             if 'Country' in df.columns:
                 filt_col1, filt_col2 = st.columns([1.5, 2])
                 with filt_col1:
-                    st.markdown("<p class='filter-label'>Country</p>", unsafe_allow_html=True)
+                    st.markdown("<p class='filter-label'>Country</p>",
+                                unsafe_allow_html=True)
                     t3_ret_rate_country = st.selectbox(
                         "Country",
-                        options=["All Countries"] + sorted(df['Country'].dropna().unique().tolist()),
+                        options=["All Countries"] +
+                            sorted(df['Country'].dropna().unique().tolist()),
                         key="v_t3_ret_rate_country",
                         label_visibility="collapsed"
                     )
                 if t3_ret_rate_country != "All Countries":
-                    df_t3_ret_rate = df_t3_ret_rate[df_t3_ret_rate['Country'] == t3_ret_rate_country]
-            
+                    df_t3_ret_rate = df_t3_ret_rate[df_t3_ret_rate['Country']
+                        == t3_ret_rate_country]
+
             ret_rate = get_product_return_rate(df_t3_ret_rate)
             if ret_rate.empty:
                 st.warning("No returns data found.")
             else:
-                st.plotly_chart(plot_product_return_rates(ret_rate, n=15), use_container_width=True)
+                st.plotly_chart(plot_product_return_rates(
+                    ret_rate, n=15), use_container_width=True)
 
         st.markdown("---")
         with st.container(border=True):
             st.markdown("### Customers Driving Most Return Revenue Loss")
             top_returners = get_top_returning_customers(df, n=15)
             if not top_returners.empty:
-                st.plotly_chart(plot_top_returning_customers(top_returners), use_container_width=True)
+                st.plotly_chart(plot_top_returning_customers(
+                    top_returners), use_container_width=True)
             else:
                 st.info("No identified customers with return data.")
 
@@ -1050,7 +1102,8 @@ elif page == ":material/analytics: Analytics Dashboard":
             if not rfm.empty:
                 filt_col1, filt_col2 = st.columns([2, 1])
                 with filt_col1:
-                    st.markdown("<p class='filter-label'>Select Segments</p>", unsafe_allow_html=True)
+                    st.markdown(
+                        "<p class='filter-label'>Select Segments</p>", unsafe_allow_html=True)
                     selected_segs = st.multiselect(
                         "Segments",
                         options=sorted(rfm['Segment'].unique().tolist()),
@@ -1058,16 +1111,19 @@ elif page == ":material/analytics: Analytics Dashboard":
                         key="v_t4_segments",
                         label_visibility="collapsed"
                     )
-                filtered_seg_summary = seg_summary[seg_summary['Segment'].isin(selected_segs)]
+                filtered_seg_summary = seg_summary[seg_summary['Segment'].isin(
+                    selected_segs)]
 
             if filtered_seg_summary.empty:
                 st.warning("Please select at least one customer segment.")
             else:
                 c1, c2 = st.columns(2)
                 with c1:
-                    st.plotly_chart(plot_rfm_segments(filtered_seg_summary), use_container_width=True)
+                    st.plotly_chart(plot_rfm_segments(
+                        filtered_seg_summary), use_container_width=True)
                 with c2:
-                    st.plotly_chart(plot_segment_revenue_share(filtered_seg_summary), use_container_width=True)
+                    st.plotly_chart(plot_segment_revenue_share(
+                        filtered_seg_summary), use_container_width=True)
 
                 st.dataframe(filtered_seg_summary.style.format({
                     'Avg_Recency_Days': '{:.0f}',
@@ -1077,8 +1133,9 @@ elif page == ":material/analytics: Analytics Dashboard":
                 }), width='stretch')
 
         st.markdown("---")
-        sub_tab1, sub_tab2, sub_tab3 = st.tabs([":material/attach_money: CLV", ":material/autorenew: New vs Returning", ":material/warning: Churn Risk"])
-        
+        sub_tab1, sub_tab2, sub_tab3 = st.tabs(
+            [":material/attach_money: CLV", ":material/autorenew: New vs Returning", ":material/warning: Churn Risk"])
+
         with sub_tab1:
             with st.container(border=True):
                 st.markdown("#### CLV Distribution")
@@ -1086,7 +1143,8 @@ elif page == ":material/analytics: Analytics Dashboard":
                 if not clv.empty:
                     filt_col1, filt_col2 = st.columns([1, 2])
                     with filt_col1:
-                        st.markdown("<p class='filter-label'>Outliers Percentile Cap</p>", unsafe_allow_html=True)
+                        st.markdown(
+                            "<p class='filter-label'>Outliers Percentile Cap</p>", unsafe_allow_html=True)
                         clv_threshold = st.slider(
                             "Capping Percentile",
                             min_value=80, max_value=100, value=99, step=1,
@@ -1095,23 +1153,29 @@ elif page == ":material/analytics: Analytics Dashboard":
                         )
                     cap = clv['TotalRevenue'].quantile(clv_threshold / 100)
                     filtered_clv = clv[clv['TotalRevenue'] <= cap]
-                    st.plotly_chart(plot_clv_distribution(filtered_clv), use_container_width=True)
-                    
+                    st.plotly_chart(plot_clv_distribution(
+                        filtered_clv), use_container_width=True)
+
                     top10_pct = clv.head(max(1, int(len(clv) * 0.1)))
-                    rev_share = top10_pct['TotalRevenue'].sum() / clv['TotalRevenue'].sum() * 100
-                    st.info(f"Top 10% of customers generate **{rev_share:.1f}%** of total revenue")
+                    rev_share = top10_pct['TotalRevenue'].sum(
+                    ) / clv['TotalRevenue'].sum() * 100
+                    st.info(
+                        f"Top 10% of customers generate **{rev_share:.1f}%** of total revenue")
                 else:
-                    st.plotly_chart(plot_clv_distribution(clv), use_container_width=True)
+                    st.plotly_chart(plot_clv_distribution(clv),
+                                    use_container_width=True)
                 with st.expander("Full CLV table"):
                     st.dataframe(clv.head(100), width='stretch')
-                
+
         with sub_tab2:
             with st.container(border=True):
                 new_ret = get_new_vs_returning_customers(df)
-                st.plotly_chart(plot_new_vs_returning(new_ret), use_container_width=True)
-            
+                st.plotly_chart(plot_new_vs_returning(
+                    new_ret), use_container_width=True)
+
         with sub_tab3:
-            days = st.slider("Inactive for more than (days)", 30, 180, 90, step=15)
+            days = st.slider("Inactive for more than (days)",
+                             30, 180, 90, step=15)
             churned = get_churned_customers(df, days_threshold=days)
             st.metric(f"Customers inactive {days}+ days", f"{len(churned):,}")
             if not churned.empty:
@@ -1126,32 +1190,38 @@ elif page == ":material/analytics: Analytics Dashboard":
 
     with tab5:
         geo_full = get_country_performance(df)
-        
+
         with st.container(border=True):
             st.markdown("### Geographic Distribution")
-            
+
             filt_col1, filt_col2 = st.columns([1, 3])
             with filt_col1:
-                st.markdown("<p class='filter-label'>Exclude UK for Scale</p>", unsafe_allow_html=True)
-                exclude_uk = st.toggle("Exclude United Kingdom", value=True, key="geo_excl_uk", label_visibility="collapsed")
-            
+                st.markdown(
+                    "<p class='filter-label'>Exclude UK for Scale</p>", unsafe_allow_html=True)
+                exclude_uk = st.toggle(
+                    "Exclude United Kingdom", value=True, key="geo_excl_uk", label_visibility="collapsed")
+
             geo_map_data = geo_full.copy()
             if exclude_uk:
-                geo_map_data = geo_map_data[geo_map_data['Country'] != 'United Kingdom']
-                
+                geo_map_data = geo_map_data[geo_map_data['Country']
+                    != 'United Kingdom']
+
             if geo_map_data.empty:
                 st.warning("No geographic data found.")
             else:
-                st.plotly_chart(plot_country_revenue(geo_map_data, exclude_uk=exclude_uk), use_container_width=True)
-                
+                st.plotly_chart(plot_country_revenue(
+                    geo_map_data, exclude_uk=exclude_uk), use_container_width=True)
+
                 c1, c2 = st.columns([2, 1])
                 with c1:
                     n = st.slider("Top N countries", 5, 20, 10, key="geo_n")
-                    st.plotly_chart(plot_top_countries_bar(geo_map_data, n=n, exclude_uk=False), use_container_width=True)
+                    st.plotly_chart(plot_top_countries_bar(
+                        geo_map_data, n=n, exclude_uk=False), use_container_width=True)
                 with c2:
                     st.markdown("### Country Table")
                     st.dataframe(
-                        geo_map_data.head(20).style.format({'Revenue': '£{:,.0f}'}),
+                        geo_map_data.head(20).style.format(
+                            {'Revenue': '£{:,.0f}'}),
                         width='stretch',
                     )
 
@@ -1161,7 +1231,8 @@ elif page == ":material/analytics: Analytics Dashboard":
 elif page == ":material/insights: Insights & Actions":
     st.title(":material/insights: Insights & Actions")
     df = st.session_state['df_clean']
-    action_tab1, action_tab2 = st.tabs([":material/lightbulb: Recommendations", ":material/psychology: What-If Simulator"])
+    action_tab1, action_tab2 = st.tabs(
+        [":material/lightbulb: Recommendations", ":material/psychology: What-If Simulator"])
 
     with action_tab1:
         with st.spinner("Generating recommendations..."):
@@ -1170,9 +1241,9 @@ elif page == ":material/insights: Insights & Actions":
         if not recs:
             st.warning("Not enough data to generate recommendations.")
         else:
-            high   = [r for r in recs if r['priority'] == 'High']
+            high = [r for r in recs if r['priority'] == 'High']
             medium = [r for r in recs if r['priority'] == 'Medium']
-            low    = [r for r in recs if r['priority'] == 'Low']
+            low = [r for r in recs if r['priority'] == 'Low']
 
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Total Recommendations", str(len(recs)))
@@ -1200,14 +1271,46 @@ elif page == ":material/insights: Insights & Actions":
                 trending_up_svg = '<svg style="vertical-align: middle; margin-right: 4px; color: var(--color-accent);" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>'
 
                 st.markdown(f'''
-<div class="rec-card {css_class}">
-  <strong>{priority_svg} {rec['title']}</strong>
-  &nbsp;&nbsp;<span style="color:var(--color-text-secondary); font-size:0.85rem">{rec['type']} &middot; {rec['segment']}</span><br><br>
-  {rec['message']}<br><br>
-  <span style="color:var(--color-accent); font-weight:600">{trending_up_svg} Estimated impact: ~+{rec['impact_pct']}% profit improvement</span>
-</div>
-''', unsafe_allow_html=True)
+                    <div class="rec-card {css_class}">
+                    <strong>
+                        {priority_svg} {rec['title']}
+                    </strong>
 
+                    &nbsp;&nbsp;
+
+                    <span style="
+                        color:var(--color-text-secondary);
+                        font-size:0.85rem;
+                    ">
+                        {rec['type']} &middot; {rec['segment']}
+                    </span>
+
+                    <br><br>
+
+                    {rec['message']}
+
+                    <br><br>
+
+                    <span style="
+                        color:var(--color-accent);
+                        font-weight:600;
+                    ">
+                        {trending_up_svg}
+                        Estimated potential impact:
+                        ~{rec['impact_pct']}%
+                    </span>
+
+                    <br>
+
+                    <span style="
+                        color:var(--color-text-secondary);
+                        font-size:0.75rem;
+                    ">
+                        Heuristic estimate based on dataset patterns and
+                        business assumptions. Actual results may vary.
+                    </span>
+                    </div>
+                    ''', unsafe_allow_html=True)
             st.markdown("---")
             rec_df = pd.DataFrame(recs)
             st.download_button(
@@ -1221,7 +1324,8 @@ elif page == ":material/insights: Insights & Actions":
         kpis = get_kpi_summary(df)
         base_revenue = kpis.get('total_revenue', 0)
 
-        st.markdown("Adjust the sliders below to simulate the revenue impact of business actions.")
+        st.markdown(
+            "Adjust the sliders below to simulate the revenue impact of business actions.")
         st.markdown("---")
 
         col1, col2 = st.columns(2)
@@ -1247,14 +1351,24 @@ elif page == ":material/insights: Insights & Actions":
         with col2:
             st.markdown("#### :material/lightbulb: Projected Impact")
             rfm = compute_rfm(df)
-            
-            champions_revenue = rfm[rfm['Segment'] == 'Champions']['Monetary'].sum() if not rfm.empty else 0
-            loyal_revenue = rfm[rfm['Segment'] == 'Loyal Customers']['Monetary'].sum() if not rfm.empty else 0
+
+            champions_revenue = rfm[rfm['Segment'] == 'Champions']['Monetary'].sum(
+            ) if not rfm.empty else 0
+            loyal_revenue = rfm[rfm['Segment'] == 'Loyal Customers']['Monetary'].sum(
+            ) if not rfm.empty else 0
             vip_revenue = champions_revenue + loyal_revenue
-            
-            at_risk_revenue = rfm[rfm['Segment'] == 'At Risk']['Monetary'].sum() if not rfm.empty else 0
-            recent_revenue = rfm[rfm['Segment'] == 'Recent Customers']['Monetary'].sum() if not rfm.empty else 0
-            
+
+            at_risk_revenue = rfm[rfm['Segment'] == 'At Risk']['Monetary'].sum(
+            ) if not rfm.empty else 0
+            new_customer_segments = [
+                "Recent Customers",
+                "New One-Time Buyers",
+            ]
+
+            recent_revenue = rfm[
+                rfm["Segment"].isin(new_customer_segments)
+                ]["Monetary"].sum() if not rfm.empty else 0
+
             if vip_revenue == 0 and base_revenue > 0:
                 vip_revenue = base_revenue * 0.30
             if at_risk_revenue == 0 and base_revenue > 0:
@@ -1263,13 +1377,16 @@ elif page == ":material/insights: Insights & Actions":
                 recent_revenue = base_revenue * 0.05
 
             ret_summary = get_return_summary(df)
-            revenue_lost_returns = ret_summary.get('revenue_lost_from_returns', 0)
-            
-            revenue_from_vip     = vip_revenue * (vip_retention / 100)
+            revenue_lost_returns = ret_summary.get(
+                'revenue_lost_from_returns', 0)
+
+            revenue_from_vip = vip_revenue * (vip_retention / 100)
             revenue_from_winback = at_risk_revenue * (winback_rate / 100)
-            revenue_from_returns = revenue_lost_returns * (return_reduction / 100)
-            revenue_from_new     = recent_revenue * (new_customer_growth / 100)
-            total_uplift         = revenue_from_vip + revenue_from_winback + revenue_from_returns + revenue_from_new
+            revenue_from_returns = revenue_lost_returns * \
+                (return_reduction / 100)
+            revenue_from_new = recent_revenue * (new_customer_growth / 100)
+            total_uplift = revenue_from_vip + revenue_from_winback + \
+                revenue_from_returns + revenue_from_new
 
             st.metric("Base Revenue", f"£{base_revenue:,.0f}")
             st.metric("VIP Retention Uplift", f"+£{revenue_from_vip:,.0f}")
