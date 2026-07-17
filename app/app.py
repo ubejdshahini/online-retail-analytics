@@ -1,5 +1,7 @@
 import sys
 import os
+from html import escape
+
 import pandas as pd
 import streamlit as st
 
@@ -1449,29 +1451,41 @@ elif page == ":material/analytics: Analytics Dashboard":
         with st.container(border=True):
             st.markdown("### Geographic Distribution")
 
-            filt_col1, filt_col2 = st.columns([1, 3])
-            with filt_col1:
-                st.markdown(
-                    "<p class='filter-label'>Exclude UK for Scale</p>", unsafe_allow_html=True)
-                exclude_uk = st.toggle(
-                    "Exclude United Kingdom", value=True, key="geo_excl_uk", label_visibility="collapsed")
-
-            geo_map_data = geo_full.copy()
-            if exclude_uk:
-                geo_map_data = geo_map_data[geo_map_data['Country']
-                    != 'United Kingdom']
-
-            if geo_map_data.empty:
+            if geo_full.empty:
                 st.warning("No geographic data found.")
             else:
+                top_country = str(geo_full.iloc[0]['Country'])
+
+                filt_col1, filt_col2 = st.columns([1, 3])
+                with filt_col1:
+                    st.markdown(
+                        f"<p class='filter-label'>Exclude {escape(top_country)} for Scale</p>",
+                        unsafe_allow_html=True,
+                    )
+                    exclude_top_country = st.toggle(
+                        f"Exclude {top_country}",
+                        value=True,
+                        key="geo_excl_top_country",
+                        label_visibility="collapsed",
+                    )
+
+                excluded_country = top_country if exclude_top_country else None
+                geo_map_data = geo_full[
+                    geo_full['Country'] != excluded_country
+                ] if excluded_country else geo_full
+
+                if geo_map_data.empty:
+                    st.warning(
+                        f"No geographic data remains after excluding {top_country}.")
+
                 st.plotly_chart(plot_country_revenue(
-                    geo_map_data, exclude_uk=exclude_uk), use_container_width=True)
+                    geo_full, excluded_country=excluded_country), use_container_width=True)
 
                 c1, c2 = st.columns([2, 1])
                 with c1:
                     n = st.slider("Top N countries", 5, 20, 10, key="geo_n")
                     st.plotly_chart(plot_top_countries_bar(
-                        geo_map_data, n=n, exclude_uk=False), use_container_width=True)
+                        geo_full, n=n, excluded_country=excluded_country), use_container_width=True)
                 with c2:
                     st.markdown("### Country Table")
                     st.dataframe(

@@ -25,6 +25,12 @@ COLORS = {
 
 PALETTE = list(CHART_COLORS)
 SEGMENT_PALETTE = PALETTE + ['#06B6D4', '#F97316']
+MAP_REVENUE_SCALE = [
+    [0.00, THEME['accent_tint']],
+    [0.33, '#93C5FD'],
+    [0.66, '#60A5FA'],
+    [1.00, THEME['accent']],
+]
 
 BASE_LAYOUT = dict(
     paper_bgcolor=COLORS['background'],
@@ -596,25 +602,27 @@ def plot_new_vs_returning(new_ret_df: pd.DataFrame) -> go.Figure:
 
 # GEOGRAPHIC CHART
 
-def plot_country_revenue(geo_df: pd.DataFrame, exclude_uk: bool = True) -> go.Figure:
+def plot_country_revenue(
+    geo_df: pd.DataFrame,
+    excluded_country: str | None = None,
+) -> go.Figure:
     """
     Choropleth world map of revenue by country.
-    exclude_uk: removes United Kingdom to avoid scale distortion.
+    excluded_country: optionally removes the named country to avoid scale distortion.
     """
     if geo_df.empty or 'Country' not in geo_df.columns:
         return go.Figure()
 
     df = geo_df.copy()
-    if exclude_uk:
-        df = df[df['Country'] != 'United Kingdom']
+    if excluded_country:
+        df = df[df['Country'] != excluded_country]
 
     fig = px.choropleth(
         df,
         locations='Country',
         locationmode='country names',
         color='Revenue',
-        color_continuous_scale=[[i / (len(PALETTE) - 1), color]
-                                for i, color in enumerate(PALETTE)],
+        color_continuous_scale=MAP_REVENUE_SCALE,
         hover_data={'Revenue': ':,.0f'},
         labels={'Revenue': 'Revenue (£)'},
     )
@@ -629,21 +637,22 @@ def plot_country_revenue(geo_df: pd.DataFrame, exclude_uk: bool = True) -> go.Fi
         **BASE_LAYOUT,
     )
     fig.update_layout(title=dict(
-        text='Geographic Revenue Distribution' + (' (excl. UK)' if exclude_uk else ''),
+        text='Geographic Revenue Distribution' +
+             (f' (excl. {excluded_country})' if excluded_country else ''),
         font=dict(size=18, color=COLORS['text'])
     ))
     return fig
 
 
 def plot_top_countries_bar(geo_df: pd.DataFrame, n: int = 10,
-                           exclude_uk: bool = True) -> go.Figure:
+                           excluded_country: str | None = None) -> go.Figure:
     """Horizontal bar chart: top N countries by revenue."""
     if geo_df.empty:
         return go.Figure()
 
     df = geo_df.copy()
-    if exclude_uk:
-        df = df[df['Country'] != 'United Kingdom']
+    if excluded_country:
+        df = df[df['Country'] != excluded_country]
 
     df = df.head(n).sort_values('Revenue')
     fig = go.Figure(go.Bar(
@@ -653,7 +662,9 @@ def plot_top_countries_bar(geo_df: pd.DataFrame, n: int = 10,
         text=df['Revenue'].apply(lambda v: f'£{v:,.0f}'),
         textposition='auto',
     ))
-    title = f'Top {n} Countries by Revenue' + (' (excl. UK)' if exclude_uk else '')
+    title = f'Top {n} Countries by Revenue' + (
+        f' (excl. {excluded_country})' if excluded_country else ''
+    )
     return _apply_base(fig, title)
 
 

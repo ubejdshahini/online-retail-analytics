@@ -16,11 +16,13 @@ from src.about_page import get_dataset_profile
 from src.analysis import (
     get_kpi_summary, get_return_summary, get_monthly_revenue,
     get_monthly_product_revenue, get_revenue_by_hour,
+    get_country_performance,
 )
 from src.recommendation_engine import compute_rfm, get_segment_summary, generate_recommendations
 from src.visualisations import (
     plot_monthly_revenue, plot_monthly_product_revenue,
     plot_revenue_by_hour, plot_rfm_segments, plot_segment_revenue_share,
+    plot_country_revenue, plot_top_countries_bar,
 )
 
 
@@ -371,6 +373,47 @@ class TestCustomerSegmentVisualisations:
         assert len(pie.marker.colors) == len(summary)
         assert fig.layout.showlegend is True
         assert fig.layout.legend.orientation == 'v'
+
+
+class TestGeographicAnalysis:
+    @pytest.fixture
+    def country_performance(self):
+        transactions = pd.DataFrame({
+            'Country': ['France', 'Germany', 'Germany', 'Spain'],
+            'Revenue': [120.0, 200.0, 150.0, 90.0],
+            'CustomerID': ['F1', 'G1', 'G2', 'S1'],
+            'Invoice': ['F-1', 'G-1', 'G-2', 'S-1'],
+        })
+        return get_country_performance(transactions)
+
+    def test_highest_revenue_country_is_first(self, country_performance):
+        assert country_performance.iloc[0]['Country'] == 'Germany'
+        assert country_performance.iloc[0]['Revenue'] == pytest.approx(350.0)
+
+    def test_map_excludes_named_country(self, country_performance):
+        fig = plot_country_revenue(
+            country_performance,
+            excluded_country='Germany',
+        )
+
+        assert 'Germany' not in set(fig.data[0].locations)
+        assert fig.layout.title.text.endswith('(excl. Germany)')
+
+    def test_map_uses_single_hue_blue_scale(self, country_performance):
+        fig = plot_country_revenue(country_performance)
+        colors = [color for _, color in fig.layout.coloraxis.colorscale]
+
+        assert colors == ['#DBEAFE', '#93C5FD', '#60A5FA', '#2563EB']
+
+    def test_bar_chart_excludes_named_country(self, country_performance):
+        fig = plot_top_countries_bar(
+            country_performance,
+            n=10,
+            excluded_country='Germany',
+        )
+
+        assert 'Germany' not in set(fig.data[0].y)
+        assert fig.layout.title.text.endswith('(excl. Germany)')
 
 
 class TestAboutPageDatasetProfile:
