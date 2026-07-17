@@ -19,6 +19,8 @@ def get_dataset_profile(
         "rows": len(df),
         "date_range": "N/A",
         "net_revenue": float(df['Revenue'].sum()) if 'Revenue' in df.columns else 0.0,
+        "customers": df.loc[df['CustomerID'] != 'Guest', 'CustomerID'].nunique() if 'CustomerID' in df.columns else 0,
+        "countries": df['Country'].nunique() if 'Country' in df.columns else 0,
     }
 
     if 'InvoiceDate' in df.columns:

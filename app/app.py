@@ -261,7 +261,6 @@ if "validation_reports" not in st.session_state:
 
 with st.sidebar:
     st.markdown("## :material/analytics: Retail Analytics")
-    st.markdown("---")
 
     nav_options = [":material/home: Data & Upload"]
     if st.session_state['df_clean'] is not None:
@@ -855,7 +854,7 @@ if page == ":material/home: Data & Upload":
             df['Country'].nunique()) if 'Country' in df.columns else 'N/A')
 
         with st.expander("Preview first 50 rows"):
-            st.dataframe(df.head(50), width='stretch')
+            st.dataframe(df.head(50), width='stretch', hide_index=True)
 
 
 # PAGE: ANALYTICS DASHBOARD
@@ -1235,8 +1234,7 @@ elif page == ":material/analytics: Analytics Dashboard":
                     st.warning("No product sales data found.")
                 else:
                     top = get_top_products(df_t2_top, n=top_n)
-                    st.plotly_chart(plot_top_products(
-                        top, n=top_n), use_container_width=True)
+                    st.plotly_chart(plot_top_products(top, n=top_n), use_container_width=True, key="chart_top_products")
 
         with c2:
             with st.container(border=True):
@@ -1264,10 +1262,8 @@ elif page == ":material/analytics: Analytics Dashboard":
                     st.warning("No product sales data found.")
                 else:
                     worst = get_worst_products(df_t2_worst, n=10)
-                    st.plotly_chart(plot_top_products(
-                        worst, n=10), use_container_width=True)
-                    st.caption(
-                        "Worst-selling products — consider repricing or discontinuation")
+                    st.plotly_chart(plot_top_products(worst, n=10), use_container_width=True, key="chart_worst_products")
+                    st.caption("Worst-selling products — consider repricing or discontinuation")
 
     with tab3:
         ret_summary = get_return_summary(df)
@@ -1389,7 +1385,7 @@ elif page == ":material/analytics: Analytics Dashboard":
                     'Avg_Frequency':    '{:.1f}',
                     'Avg_Revenue':      '£{:,.0f}',
                     'Total_Revenue':    '£{:,.0f}',
-                }), width='stretch')
+                }), hide_index=True, width='stretch')
 
         # st.markdown("---")
         # sub_tab1, sub_tab2, sub_tab3 = st.tabs(
@@ -1482,6 +1478,7 @@ elif page == ":material/analytics: Analytics Dashboard":
                         geo_map_data.head(20).style.format(
                             {'Revenue': '£{:,.0f}'}),
                         width='stretch',
+                        hide_index=True
                     )
 
 
