@@ -793,7 +793,7 @@ if page == ":material/home: Data & Upload":
         c4.metric("Countries", str(df['Country'].nunique()) if 'Country' in df.columns else 'N/A')
 
         with st.expander("Preview first 50 rows"):
-            st.dataframe(df.head(50), width='stretch')
+            st.dataframe(df.head(50), width='stretch', hide_index=True)
 
 
 # PAGE: ANALYTICS DASHBOARD
@@ -1073,7 +1073,7 @@ elif page == ":material/analytics: Analytics Dashboard":
                     'Avg_Frequency':    '{:.1f}',
                     'Avg_Revenue':      '£{:,.0f}',
                     'Total_Revenue':    '£{:,.0f}',
-                }), width='stretch')
+                }), hide_index=True, width='stretch')
 
         st.markdown("---")
         sub_tab1, sub_tab2, sub_tab3 = st.tabs([":material/attach_money: CLV", ":material/autorenew: New vs Returning", ":material/warning: Churn Risk"])
@@ -1102,7 +1102,7 @@ elif page == ":material/analytics: Analytics Dashboard":
                 else:
                     st.plotly_chart(plot_clv_distribution(clv), use_container_width=True)
                 with st.expander("Full CLV table"):
-                    st.dataframe(clv.head(100), width='stretch')
+                    st.dataframe(clv.head(100), width='stretch', hide_index=True)
                 
         with sub_tab2:
             with st.container(border=True):
@@ -1114,7 +1114,7 @@ elif page == ":material/analytics: Analytics Dashboard":
             churned = get_churned_customers(df, days_threshold=days)
             st.metric(f"Customers inactive {days}+ days", f"{len(churned):,}")
             if not churned.empty:
-                st.dataframe(churned.head(50), width='stretch')
+                st.dataframe(churned.head(50), width='stretch', hide_index=True)
                 csv_export = churned.to_csv(index=False).encode()
                 st.download_button(
                     ":material/download: Download churn list (CSV)",
@@ -1152,6 +1152,7 @@ elif page == ":material/analytics: Analytics Dashboard":
                     st.dataframe(
                         geo_map_data.head(20).style.format({'Revenue': '£{:,.0f}'}),
                         width='stretch',
+                        hide_index=True
                     )
 
 
