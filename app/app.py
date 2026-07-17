@@ -21,7 +21,7 @@ from src.visualisations import (
     #plot_new_vs_returning, 
     plot_country_revenue, plot_top_countries_bar,
     format_kpi_cards,
-    plot_return_rate_over_time, plot_top_returning_customers, plot_returns_revenue_impact,
+    plot_return_rate_over_time, plot_returns_revenue_impact,
 )
 from src.export_utils import generate_excel_report
 from src.recommendation_engine import compute_rfm, get_segment_summary, generate_recommendations
@@ -33,7 +33,7 @@ from src.analysis import (
     #get_customer_lifetime_value, #get_new_vs_returning_customers,
     #get_churned_customers, 
     get_return_summary,
-    get_return_rate_over_time, get_top_returning_customers, get_returns_revenue_impact,
+    get_return_rate_over_time, get_returns_revenue_impact,
 )
 from src.data_cleaning import clean_data, validate_data, add_product_flag
 
@@ -1264,16 +1264,6 @@ elif page == ":material/analytics: Analytics Dashboard":
             else:
                 st.plotly_chart(plot_product_return_rates(
                     ret_rate, n=15), use_container_width=True)
-
-        st.markdown("---")
-        with st.container(border=True):
-            st.markdown("### Customers Driving Most Return Revenue Loss")
-            top_returners = get_top_returning_customers(df, n=15)
-            if not top_returners.empty:
-                st.plotly_chart(plot_top_returning_customers(
-                    top_returners), use_container_width=True)
-            else:
-                st.info("No identified customers with return data.")
 
     with tab4:
         with st.spinner("Computing RFM scores..."):

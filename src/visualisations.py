@@ -483,7 +483,7 @@ def plot_rfm_segments(seg_summary: pd.DataFrame) -> go.Figure:
         ))
     fig = _apply_base(
         fig,
-        'Customer Segments — Recency vs Revenue (bubble size = customers)',
+        'Customer Segments: Recency vs Revenue',
     )
     fig.update_xaxes(
         title_text='Avg Days Since Last Purchase (Recency ↑ = worse)',
@@ -497,6 +497,7 @@ def plot_rfm_segments(seg_summary: pd.DataFrame) -> go.Figure:
     fig.update_layout(
         showlegend=False,
         height=500,
+        title_font_size=17,
         margin=dict(l=75, r=65, t=80, b=75),
     )
     return fig

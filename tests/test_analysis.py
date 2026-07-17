@@ -357,6 +357,7 @@ class TestCustomerSegmentVisualisations:
         assert positions['Recent Customers'] != positions['Loyal Customers']
         assert all(trace.cliponaxis is False for trace in fig.data)
         assert all(16 <= trace.marker.size <= 60 for trace in fig.data)
+        assert fig.layout.title.font.size == 17
         assert fig.layout.margin.r >= 60
 
     def test_donut_uses_inside_labels_and_complete_legend(self):
