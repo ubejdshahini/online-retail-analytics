@@ -238,12 +238,31 @@ def get_worst_products(
 
 
 def get_product_return_rate(
-    df: pd.DataFrame
+    df: pd.DataFrame,
+    min_sales_transactions: int = 3,
 ) -> pd.DataFrame:
     """
-    Return return rate for actual retail products only.
+    Return reliable, unit-based return rates for actual retail products.
+
+    Products are grouped by StockCode when it is available, with a normalized
+    description fallback for datasets without product codes.  The rate is
+    returned units divided by sold units inside the currently filtered data.
+
+    Return-only products, unmatched returns that exceed observed sales, and
+    products with too few sales transactions are excluded because a meaningful
+    return rate cannot be calculated for them.
     """
     product_df = get_product_rows(df)
+
+    result_columns = [
+        'Description',
+        'StockCode',
+        'SalesUnits',
+        'ReturnedUnits',
+        'SalesTransactions',
+        'ReturnTransactions',
+        'ReturnRate_%',
+    ]
 
     required = {
         'Description',
@@ -255,42 +274,151 @@ def get_product_return_rate(
         product_df.empty
         or not required.issubset(product_df.columns)
     ):
-        return pd.DataFrame()
+        return pd.DataFrame(columns=result_columns)
 
-    total = (
-        product_df
-        .groupby('Description')['Quantity']
-        .count()
-        .rename('Total')
+    min_sales_transactions = max(int(min_sales_transactions), 1)
+    product_df = product_df.copy()
+    product_df['_Quantity'] = pd.to_numeric(
+        product_df['Quantity'],
+        errors='coerce',
+    )
+    product_df['_Description'] = (
+        product_df['Description']
+        .astype('string')
+        .str.strip()
+    )
+    product_df = product_df[
+        product_df['_Quantity'].notna()
+        & product_df['_Quantity'].ne(0)
+        & product_df['_Description'].notna()
+        & product_df['_Description'].ne('')
+    ].copy()
+    if product_df.empty:
+        return pd.DataFrame(columns=result_columns)
+
+    # Cleaned uploads contain a boolean IsReturn column.  The quantity check
+    # also protects older datasets whose flag is incomplete.
+    if pd.api.types.is_bool_dtype(product_df['IsReturn']):
+        is_return = product_df['IsReturn'].fillna(False)
+    else:
+        normalized_flag = (
+            product_df['IsReturn']
+            .astype('string')
+            .str.strip()
+            .str.lower()
+            .map({
+                'true': True,
+                '1': True,
+                'yes': True,
+                'false': False,
+                '0': False,
+                'no': False,
+            })
+        )
+        is_return = normalized_flag.fillna(product_df['_Quantity'].lt(0))
+    product_df['_IsReturn'] = is_return | product_df['_Quantity'].lt(0)
+    product_df['_Units'] = product_df['_Quantity'].abs()
+
+    # Prefer stable product codes.  Missing codes fall back to a normalized
+    # description so the calculation still works with simpler input files.
+    if 'StockCode' in product_df.columns:
+        stock_codes = product_df['StockCode'].astype('string').str.strip()
+        valid_codes = stock_codes.notna() & stock_codes.ne('')
+        product_df['_StockCode'] = stock_codes.where(valid_codes, pd.NA)
+        product_df['_ProductKey'] = (
+            'description:' + product_df['_Description'].str.casefold()
+        )
+        product_df.loc[valid_codes, '_ProductKey'] = (
+            'stock:' + stock_codes[valid_codes].str.casefold()
+        )
+    else:
+        product_df['_StockCode'] = pd.NA
+        product_df['_ProductKey'] = (
+            'description:' + product_df['_Description'].str.casefold()
+        )
+
+    if 'Invoice' in product_df.columns:
+        invoice_ids = product_df['Invoice'].astype('string').str.strip()
+        valid_invoice = invoice_ids.notna() & invoice_ids.ne('')
+        row_ids = pd.Series(
+            'row:' + product_df.index.astype(str),
+            index=product_df.index,
+            dtype='string',
+        )
+        product_df['_TransactionKey'] = invoice_ids.where(
+            valid_invoice,
+            row_ids,
+        )
+    else:
+        product_df['_TransactionKey'] = pd.Series(
+            'row:' + product_df.index.astype(str),
+            index=product_df.index,
+            dtype='string',
+        )
+
+    sales = product_df[~product_df['_IsReturn']].copy()
+    returns = product_df[product_df['_IsReturn']].copy()
+    if sales.empty or returns.empty:
+        return pd.DataFrame(columns=result_columns)
+
+    sales_summary = sales.groupby('_ProductKey').agg(
+        SalesUnits=('_Units', 'sum'),
+        SalesTransactions=('_TransactionKey', 'nunique'),
+    )
+    return_summary = returns.groupby('_ProductKey').agg(
+        ReturnedUnits=('_Units', 'sum'),
+        ReturnTransactions=('_TransactionKey', 'nunique'),
     )
 
-    returns = (
-        product_df[
-            product_df['IsReturn']
-        ]
-        .groupby('Description')['Quantity']
-        .count()
-        .rename('Returns')
+    # Use the most common sales description as the display label.  This avoids
+    # splitting a product because of casing or surrounding whitespace.
+    sales_labels = (
+        sales.groupby('_ProductKey')['_Description']
+        .agg(lambda values: values.value_counts().index[0])
+        .rename('Description')
+    )
+    stock_code_labels = (
+        product_df.groupby('_ProductKey')['_StockCode']
+        .agg(lambda values: values.dropna().iloc[0] if values.notna().any() else pd.NA)
+        .rename('StockCode')
     )
 
     result = pd.concat(
-        [total, returns],
-        axis=1
-    ).fillna(0)
+        [
+            sales_labels,
+            stock_code_labels,
+            sales_summary,
+            return_summary,
+        ],
+        axis=1,
+        join='inner',
+    ).reset_index(drop=True)
+    if result.empty:
+        return pd.DataFrame(columns=result_columns)
+
+    result = result[
+        (result['SalesUnits'] > 0)
+        & (result['ReturnedUnits'] > 0)
+        & (result['ReturnedUnits'] <= result['SalesUnits'])
+        & (result['SalesTransactions'] >= min_sales_transactions)
+    ].copy()
+    if result.empty:
+        return pd.DataFrame(columns=result_columns)
 
     result['ReturnRate_%'] = (
-        result['Returns']
-        / result['Total']
+        result['ReturnedUnits']
+        / result['SalesUnits']
         * 100
     ).round(2)
 
     return (
-        result
+        result[result_columns]
         .sort_values(
-            'ReturnRate_%',
-            ascending=False
+            ['ReturnRate_%', 'SalesTransactions', 'SalesUnits'],
+            ascending=[False, False, False],
+            kind='stable',
         )
-        .reset_index()
+        .reset_index(drop=True)
     )
 
 # CUSTOMER ANALYSIS

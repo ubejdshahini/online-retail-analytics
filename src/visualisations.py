@@ -269,16 +269,30 @@ def plot_product_return_rates(return_df: pd.DataFrame, n: int = 15) -> go.Figure
     df['Risk'] = risk.str[0]
     colors = risk.str[1]
 
+    hover_columns = ['Risk']
+    hover_lines = ['<br>Risk level: %{customdata[0]}']
+    for column, label in [
+        ('SalesUnits', 'Units sold'),
+        ('ReturnedUnits', 'Units returned'),
+        ('SalesTransactions', 'Sales transactions'),
+    ]:
+        if column in df.columns:
+            hover_columns.append(column)
+            hover_lines.append(
+                f'<br>{label}: %{{customdata[{len(hover_columns) - 1}]:,.0f}}'
+            )
+
     fig = go.Figure(go.Bar(
         x=df['ReturnRate_%'], y=df['Description'],
         orientation='h',
         marker_color=colors,
         text=df['ReturnRate_%'].apply(lambda v: f'{v:.1f}%'),
         textposition='auto',
-        customdata=df[['Risk']],
+        customdata=df[hover_columns],
         hovertemplate=(
             '<b>%{y}</b><br>Return rate: %{x:.1f}%'
-            '<br>Risk level: %{customdata[0]}<extra></extra>'
+            + ''.join(hover_lines)
+            + '<extra></extra>'
         ),
         showlegend=False,
     ))

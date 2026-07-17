@@ -1260,8 +1260,15 @@ elif page == ":material/analytics: Analytics Dashboard":
 
             ret_rate = get_product_return_rate(df_t3_ret_rate)
             if ret_rate.empty:
-                st.warning("No returns data found.")
+                st.info(
+                    "No products have enough matched sales and return history "
+                    "for this filter. At least 3 sales transactions are required."
+                )
             else:
+                st.caption(
+                    "Return rate = units returned ÷ units sold. Products with "
+                    "unmatched returns or fewer than 3 sales transactions are excluded."
+                )
                 st.plotly_chart(plot_product_return_rates(
                     ret_rate, n=15), use_container_width=True)
 
