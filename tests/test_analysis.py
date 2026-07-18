@@ -16,7 +16,7 @@ from src.about_page import get_dataset_profile
 from src.analysis import (
     get_kpi_summary, get_return_summary, get_monthly_revenue,
     get_monthly_product_revenue, get_revenue_by_hour,
-    get_country_performance,
+    get_country_performance, get_product_return_rate,
 )
 from src.recommendation_engine import compute_rfm, get_segment_summary, generate_recommendations
 from src.visualisations import (
@@ -104,6 +104,77 @@ class TestCleanData:
         cleaned = clean_data(raw_with_dup)
         # Should have the same number of rows as cleaning original (duplicate is removed)
         assert len(cleaned) == len(clean_data(raw_df))
+
+
+# TESTS: analysis.get_product_return_rate()
+
+class TestProductReturnRate:
+    def test_uses_units_and_groups_description_variants_by_stock_code(self):
+        df = pd.DataFrame({
+            'Invoice': ['S1', 'S2', 'S3', 'R1'],
+            'StockCode': ['A1', 'A1', 'A1', 'A1'],
+            'Description': ['Widget A', 'Widget A ', 'WIDGET A', 'Widget A'],
+            'Quantity': [5, 5, 5, -3],
+            'IsReturn': [False, False, False, True],
+        })
+
+        result = get_product_return_rate(df)
+
+        assert len(result) == 1
+        assert result.iloc[0]['StockCode'] == 'A1'
+        assert result.iloc[0]['SalesUnits'] == 15
+        assert result.iloc[0]['ReturnedUnits'] == 3
+        assert result.iloc[0]['SalesTransactions'] == 3
+        assert result.iloc[0]['ReturnRate_%'] == 20
+
+    def test_excludes_return_only_products_after_country_filter(self):
+        df = pd.DataFrame({
+            'Invoice': ['UK1', 'UK2', 'UK3', 'CI-R1'],
+            'StockCode': ['A1', 'A1', 'A1', 'A1'],
+            'Description': ['Widget A'] * 4,
+            'Quantity': [5, 5, 5, -3],
+            'IsReturn': [False, False, False, True],
+            'Country': ['UK', 'UK', 'UK', 'Channel Islands'],
+        })
+
+        country_slice = df[df['Country'] == 'Channel Islands']
+        result = get_product_return_rate(
+            country_slice,
+            min_sales_transactions=1,
+        )
+
+        assert result.empty
+
+    def test_excludes_low_sample_and_unmatched_return_products(self):
+        df = pd.DataFrame({
+            'Invoice': ['S1', 'R1', 'S2', 'S3', 'S4', 'R2'],
+            'StockCode': ['LOW', 'LOW', 'BAD', 'BAD', 'BAD', 'BAD'],
+            'Description': [
+                'Low Sample', 'Low Sample',
+                'Unmatched', 'Unmatched', 'Unmatched', 'Unmatched',
+            ],
+            'Quantity': [12, -12, 2, 2, 2, -8],
+            'IsReturn': [False, True, False, False, False, True],
+        })
+
+        result = get_product_return_rate(df)
+
+        assert result.empty
+
+    def test_falls_back_to_normalized_description_without_stock_code(self):
+        df = pd.DataFrame({
+            'Description': ['Gadget', ' gadget ', 'GADGET', 'Gadget'],
+            'Quantity': [2, 2, 2, -2],
+            'IsReturn': [False, False, False, True],
+        })
+
+        result = get_product_return_rate(df)
+
+        assert len(result) == 1
+        assert pd.isna(result.iloc[0]['StockCode'])
+        assert result.iloc[0]['SalesUnits'] == 6
+        assert result.iloc[0]['ReturnedUnits'] == 2
+        assert result.iloc[0]['ReturnRate_%'] == 33.33
 
 
 # TESTS: analysis.get_kpi_summary()
