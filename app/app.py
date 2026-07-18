@@ -1400,7 +1400,8 @@ elif page == ":material/analytics: Analytics Dashboard":
 
                 c1, c2 = st.columns([2, 1])
                 with c1:
-                    n = st.slider("Top N countries", 5, 20, 10, key="geo_n")
+                    current_n = st.session_state.get("geo_n", 10)
+                    n = st.slider(f"Top {current_n} countries", 5, 20, 10, key="geo_n")
                     st.plotly_chart(plot_top_countries_bar(
                         geo_full, n=n, excluded_country=excluded_country), use_container_width=True)
                 with c2:
