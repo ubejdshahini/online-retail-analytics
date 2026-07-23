@@ -542,9 +542,47 @@ if page == ":material/home: Data & Upload":
 
         PROJECT_ROOT = Path(__file__).resolve().parent.parent
         DATA_DIR = PROJECT_ROOT / "data" / "Testing Datasets"
+        SAMPLE_DATASET_PATH = DATA_DIR / "retail_dirty_2017.csv"
 
         # ---------------------------------------------------------
-        # 1. Browser upload
+        # 1. Built-in sample dataset
+        # ---------------------------------------------------------
+        if st.button(
+            ":material/bolt: Load 2017 sample dataset",
+            key="btn_load_2017_sample",
+            help="Load the bundled retail_dirty_2017.csv file.",
+        ):
+            if not SAMPLE_DATASET_PATH.is_file():
+                st.error("The bundled 2017 sample dataset could not be found.")
+            else:
+                st.session_state["validation_reports"] = []
+                st.session_state["sheet_names"] = None
+                st.session_state["excel_file_bytes"] = None
+                st.session_state["local_excel_path"] = None
+                st.session_state["excel_source"] = None
+                st.session_state["sheet_mode"] = None
+                st.session_state["selected_sheet"] = None
+
+                try:
+                    sample_df = pd.read_csv(SAMPLE_DATASET_PATH)
+                except Exception as e:
+                    st.error(f"Could not read the 2017 sample dataset: {e}")
+                else:
+                    df = _process_single_df(
+                        sample_df,
+                        SAMPLE_DATASET_PATH.name,
+                    )
+                    if df is not None:
+                        st.session_state["df_clean"] = df
+                        st.session_state["filename"] = SAMPLE_DATASET_PATH.name
+                        st.session_state["last_uploaded_file"] = None
+                        st.session_state["current_tab"] = (
+                            ":material/analytics: Analytics Dashboard"
+                        )
+                        st.rerun()
+
+        # ---------------------------------------------------------
+        # 2. Browser upload
         # ---------------------------------------------------------
         uploaded = st.file_uploader(
             "Drop your CSV or Excel file here",
